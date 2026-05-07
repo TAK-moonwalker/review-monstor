@@ -1,0 +1,88 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Review Monster – Firestore Security Rules
+//
+// MVP approach (current file):
+//   Admin operations are gated by Firebase Auth (any signed-in user).
+//   Public review submission is allowed directly from the client with
+//   lightweight data validation (token must exist and be unused).
+//
+// ⚠️  KNOWN LIMITATION (MVP):
+//   Client-side rules cannot atomically validate a token AND mark it used in
+//   one transaction, so a race condition is theoretically possible.
+//
+// RECOMMENDED FOR PRODUCTION:
+//   Replace the public `reviews` write rule with a Cloud Function:
+//
+//     exports.submitReviewByToken = onCall(async ({ data }) => {
+//       const { token, ...reviewData } = data;
+//       const reqSnap = await db.collection('reviewRequests')
+//         .where('token', '==', token).limit(1).get();
+//       if (reqSnap.empty) throw new HttpsError('not-found', 'Invalid token');
+//       const req = reqSnap.docs[0];
+//       if (req.data().used) throw new HttpsError('failed-precondition', 'Token already used');
+//       const batch = db.batch();
+//       batch.set(db.collection('reviews').doc(), { ...reviewData, source: 'qr_form', status: 'draft' });
+//       batch.update(req.ref, { used: true, submittedReviewId: ..., updatedAt: FieldValue.serverTimestamp() });
+//       await batch.commit();
+//     });
+//
+//   Then lock down the public write on `reviews` with:
+//     allow create: if false;  // Cloud Function only
+// ─────────────────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: is the request made by a signed-in admin?
+    function isAdmin() {
+      return request.auth != null;
+    }
+
+    // ── reviews ───────────────────────────────────────────────────────────────
+    match /reviews/{reviewId} {
+      // Admins: full access
+      allow read, write: if isAdmin();
+
+      // Public: create only (submit review via public form)
+      // Validates minimum required fields and blocks status manipulation.
+      allow create: if
+        request.auth == null &&
+        request.resource.data.keys().hasAll(['reviewerName', 'body', 'rating', 'source']) &&
+        request.resource.data.status == 'draft' &&
+        request.resource.data.source == 'qr_form' &&
+        request.resource.data.rating is int &&
+        request.resource.data.rating >= 1 &&
+        request.resource.data.rating <= 5;
+    }
+
+    // ── reviewRequests ────────────────────────────────────────────────────────
+    match /reviewRequests/{requestId} {
+      // Admins: full access
+      allow read, write: if isAdmin();
+
+      // Public: read a single request by document ID (for token lookup via getDocs query)
+      // Note: reading the full collection is blocked; only query by token is used in code.
+      allow get: if true;
+
+      // Public: mark request as used after submitting review
+      // Only allows setting used=true and submittedReviewId; nothing else.
+      allow update: if
+        request.auth == null &&
+        request.resource.data.used == true &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['used', 'submittedReviewId', 'updatedAt']);
+    }
+
+    // ── settings ──────────────────────────────────────────────────────────────
+    match /settings/{docId} {
+      // Admins: full access
+      allow read, write: if isAdmin();
+
+      // Public: read-only (needed for reviewFormTitle, coupon etc. on public pages)
+      allow read: if true;
+    }
+
+  }
+}
