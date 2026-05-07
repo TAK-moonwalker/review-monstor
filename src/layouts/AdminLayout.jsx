@@ -46,7 +46,7 @@ export default function AdminLayout() {
     <Box>
       <Toolbar>
         <Typography variant="h6" fontWeight={700}>
-          👾 Review Monster
+          Review Monster
         </Typography>
       </Toolbar>
       <Divider />

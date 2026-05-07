@@ -3,10 +3,27 @@ const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {initializeApp} = require("firebase-admin/app");
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 
-initializeApp();
+const projectId =
+  process.env.GCLOUD_PROJECT ||
+  process.env.GCP_PROJECT ||
+  "review-monster-80750";
+
+initializeApp({projectId});
 setGlobalOptions({maxInstances: 10, region: "us-central1"});
 
-const db = getFirestore();
+let db;
+
+/**
+ * Lazily creates and reuses a Firestore client.
+ * Avoids expensive startup work during function discovery.
+ * @return {object} Firestore client instance.
+ */
+function getDb() {
+  if (!db) {
+    db = getFirestore();
+  }
+  return db;
+}
 
 /**
  * submitReviewByToken
@@ -23,6 +40,8 @@ const db = getFirestore();
  *   //           couponCode, thankYouMessage }
  */
 exports.submitReviewByToken = onCall(async (request) => {
+  const db = getDb();
+
   const {
     token,
     reviewerName,

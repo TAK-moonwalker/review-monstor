@@ -17,8 +17,10 @@ import {
 import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
 import { toJpeg } from 'html-to-image';
 
-// Rendered at 540px; pixelRatio:2 → 1080×1080px JPEG output
-const CARD_SIZE = 540;
+// Rendered at 540px wide; pixelRatio:2 → 1080px wide output
+// Editorial Split is 4:5 → 540×675 rendered → 1080×1350 exported
+const CARD_SIZE       = 540;
+const EDITORIAL_HEIGHT = Math.round(CARD_SIZE * 5 / 4); // 675
 
 // Warm neutral palette — premium Japanese lifestyle brand
 const CREAM     = '#faf8f4';
@@ -276,25 +278,26 @@ export default function SnsCardGeneratorDialog({ open, onClose, review }) {
   );
 
   // ─────────────────────────────────────────────────────────────
-  // Layout 3 — Editorial Split
-  //   Top ~52% photo (or warm linen when none), bottom cream
-  //   panel with text. Gradient fades photo into cream.
-  //   Gold accent bar at the very bottom.
+  // Layout 3 — Editorial Split  (4:5 vertical, 1080×1350 export)
+  //   Top: true 1:1 square photo (540×540 rendered)
+  //   Bottom: cream text panel (540×135 rendered = 270px exported)
+  //   No overlap — clean hard edge between image and text.
   // ─────────────────────────────────────────────────────────────
-  const photoH = Math.round(CARD_SIZE * 0.52); // ≈ 281px
+  const textPanelH = EDITORIAL_HEIGHT - CARD_SIZE; // 135px
 
   const cardEditorialSplit = (
     <div style={{
-      width: CARD_SIZE, height: CARD_SIZE,
-      position: 'relative', overflow: 'hidden',
+      width: CARD_SIZE, height: EDITORIAL_HEIGHT,
+      display: 'flex', flexDirection: 'column',
       backgroundColor: CREAM,
       fontFamily: 'Georgia, serif',
+      overflow: 'hidden',
     }}>
-      {/* Photo half */}
+      {/* ── Square photo block (1:1) ── */}
       <div style={{
-        position: 'absolute', top: 0, left: 0, right: 0, height: photoH,
+        width: CARD_SIZE, height: CARD_SIZE, flexShrink: 0,
+        position: 'relative', overflow: 'hidden',
         backgroundColor: hasImage ? '#1a1714' : LINEN,
-        overflow: 'hidden',
       }}>
         {hasImage && (
           <img
@@ -305,7 +308,13 @@ export default function SnsCardGeneratorDialog({ open, onClose, review }) {
           />
         )}
 
-        {/* Brand name on photo */}
+        {/* Top vignette for brand legibility */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 70,
+          background: 'linear-gradient(to bottom, rgba(20,16,12,0.45), transparent)',
+        }} />
+
+        {/* Brand name — top left of photo */}
         {brandName && (
           <div style={{
             position: 'absolute', top: 20, left: 28,
@@ -316,54 +325,56 @@ export default function SnsCardGeneratorDialog({ open, onClose, review }) {
             {brandName}
           </div>
         )}
-
-        {/* Gradient fade photo → cream */}
-        <div style={{
-          position: 'absolute', bottom: 0, left: 0, right: 0, height: 80,
-          background: `linear-gradient(to bottom, transparent, ${CREAM})`,
-        }} />
       </div>
 
-      {/* Text panel — overlaps fade slightly */}
+      {/* ── Text panel — full width, sits cleanly below photo ── */}
       <div style={{
-        position: 'absolute', top: photoH - 14, left: 0, right: 0, bottom: 0,
+        width: CARD_SIZE, height: textPanelH, flexShrink: 0,
         backgroundColor: CREAM,
-        padding: '16px 36px 34px',
+        borderTop: `3px solid ${GOLD}`,
+        padding: '12px 32px 10px',
         display: 'flex', flexDirection: 'column', justifyContent: 'center',
         overflow: 'hidden',
+        boxSizing: 'border-box',
       }}>
-        {showRating && rating > 0 && (
-          <div style={{ marginBottom: 12 }}>{renderStars(GOLD, LINEN)}</div>
-        )}
+        {/* Stars + reviewer name on same row to save vertical space */}
         <div style={{
-          color: DARK, fontSize: Math.min(fontSize, 23),
-          fontStyle: 'italic', lineHeight: 1.62,
-          marginBottom: 14, overflow: 'hidden',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 8,
+        }}>
+          {showRating && rating > 0 && (
+            <div>{renderStars(GOLD, LINEN)}</div>
+          )}
+          {showName && review.reviewerName && (
+            <div style={{
+              color: WARM_GRAY, fontSize: 10, letterSpacing: 1,
+              fontFamily: '"Helvetica Neue", Arial, sans-serif',
+            }}>
+              {review.reviewerName}
+            </div>
+          )}
+        </div>
+
+        {/* Quote text */}
+        <div style={{
+          color: DARK,
+          fontSize: Math.min(fontSize, 15),
+          fontStyle: 'italic', lineHeight: 1.55,
+          overflow: 'hidden',
+          display: '-webkit-box',
+          WebkitLineClamp: 3,
+          WebkitBoxOrient: 'vertical',
         }}>
           {displayText
             ? `\u201C${displayText}\u201D`
             : <span style={{ color: LINEN }}>No text selected</span>}
         </div>
-        {showName && review.reviewerName && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 20, height: 1, backgroundColor: GOLD, flexShrink: 0 }} />
-            <div style={{
-              color: WARM_GRAY, fontSize: 11, letterSpacing: 1,
-              fontFamily: '"Helvetica Neue", Arial, sans-serif',
-            }}>
-              {review.reviewerName}
-            </div>
-          </div>
-        )}
       </div>
-
-      {/* Bottom gold accent bar */}
-      <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0,
-        height: 3, backgroundColor: GOLD,
-      }} />
     </div>
   );
+
+  // Card height varies by layout
+  const cardHeight = layout === 'editorial-split' ? EDITORIAL_HEIGHT : CARD_SIZE;
 
   // Active layout
   const cardContent =
@@ -485,8 +496,8 @@ export default function SnsCardGeneratorDialog({ open, onClose, review }) {
               overflow: 'hidden',
               flexShrink: 0,
             }}>
-              {/* cardRef wraps exactly at CARD_SIZE so html-to-image captures correctly */}
-              <div ref={cardRef} style={{ width: CARD_SIZE, height: CARD_SIZE, overflow: 'hidden' }}>
+              {/* cardRef size adapts to layout — editorial-split is taller (4:5) */}
+              <div ref={cardRef} style={{ width: CARD_SIZE, height: cardHeight, overflow: 'hidden' }}>
                 {cardContent}
               </div>
             </Box>
