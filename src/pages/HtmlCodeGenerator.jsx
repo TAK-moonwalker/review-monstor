@@ -1,0 +1,325 @@
+import { useMemo, useState } from 'react';
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Checkbox,
+  FormControlLabel,
+  Grid,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import ContentCopyOutlined from '@mui/icons-material/ContentCopyOutlined';
+import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
+import { useReviews } from '../hooks/useReviews';
+import LoadingScreen from '../components/LoadingScreen';
+import { generateShopifyReviewHtml } from '../utils/generateShopifyReviewHtml';
+
+const TEXT_SOURCE_OPTIONS = [
+  { value: 'shortQuote', label: 'shortQuote' },
+  { value: 'translationEn', label: 'translationEn' },
+  { value: 'cleanedTextJa', label: 'cleanedTextJa' },
+  { value: 'body', label: 'body' },
+];
+
+const IMAGE_SOURCE_OPTIONS = [
+  { value: 'postcardImageUrl', label: 'postcardImageUrl' },
+  { value: 'firstPictureUrl', label: 'firstPictureUrl' },
+];
+
+const LAYOUT_OPTIONS = [
+  { value: 'grid', label: 'grid' },
+  { value: 'horizontal', label: 'carousel-like horizontal scroll' },
+];
+
+const THEME_OPTIONS = [
+  { value: 'minimal', label: 'minimal' },
+  { value: 'warm', label: 'warm' },
+  { value: 'editorial', label: 'editorial' },
+];
+
+const INITIAL_OPTIONS = {
+  cardCount: 6,
+  textSource: 'shortQuote',
+  imageSource: 'postcardImageUrl',
+  sectionTitle: 'Customer Reviews',
+  brandLabel: 'Review Monster',
+  layout: 'grid',
+  theme: 'minimal',
+  showReviewerName: true,
+  showRating: true,
+  showProductTitle: false,
+  onlyPermissionGranted: true,
+  onlyReadyPublished: true,
+};
+
+function countEligibleReviews(reviews, options) {
+  return (Array.isArray(reviews) ? reviews : [])
+    .filter((review) => {
+      if (options.onlyPermissionGranted && review?.permissionGranted !== true) return false;
+      if (options.onlyReadyPublished) {
+        const status = String(review?.status || '').toLowerCase();
+        if (status !== 'ready' && status !== 'published') return false;
+      }
+      const text = typeof review?.[options.textSource] === 'string' ? review[options.textSource].trim() : '';
+      const image = options.imageSource === 'firstPictureUrl'
+        ? (typeof review?.pictureUrls?.[0] === 'string' ? review.pictureUrls[0].trim() : '')
+        : (typeof review?.postcardImageUrl === 'string' ? review.postcardImageUrl.trim() : '');
+      return !!text && !!image;
+    })
+    .length;
+}
+
+export default function HtmlCodeGenerator() {
+  const { reviews, loading, error } = useReviews();
+  const [options, setOptions] = useState(INITIAL_OPTIONS);
+  const [copyMessage, setCopyMessage] = useState('');
+
+  const eligibleCount = useMemo(() => countEligibleReviews(reviews, options), [reviews, options]);
+  const generatedCode = useMemo(() => generateShopifyReviewHtml(reviews, options), [reviews, options]);
+
+  if (loading) return <LoadingScreen />;
+
+  const handleChange = (key) => (event) => {
+    const value = event.target.value;
+    setOptions((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleCheck = (key) => (event) => {
+    const checked = event.target.checked;
+    setOptions((prev) => ({ ...prev, [key]: checked }));
+  };
+
+  const handleCopy = async () => {
+    if (!generatedCode) return;
+    try {
+      await navigator.clipboard.writeText(generatedCode);
+      setCopyMessage('Code copied to clipboard.');
+    } catch {
+      setCopyMessage('Could not copy automatically. Select and copy from the textarea.');
+    }
+  };
+
+  const handleDownload = () => {
+    if (!generatedCode) return;
+    const blob = new Blob([generatedCode], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'shopify-reviews-section.html';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <Box>
+      <Typography variant="h5" fontWeight={700} gutterBottom>
+        HTML Code Generator
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Generate standalone HTML/CSS/JS for Shopify Custom Liquid from your existing Firebase reviews.
+      </Typography>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Failed to load reviews: {String(error.message || error)}
+        </Alert>
+      )}
+
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, md: 5 }}>
+          <Card variant="outlined" sx={{ height: '100%' }}>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                Settings
+              </Typography>
+
+              <Stack spacing={2}>
+                <TextField
+                  label="Number of cards"
+                  type="number"
+                  value={options.cardCount}
+                  onChange={handleChange('cardCount')}
+                  slotProps={{ htmlInput: { min: 1, max: 50 } }}
+                  size="small"
+                  fullWidth
+                />
+
+                <TextField
+                  select
+                  label="Text source"
+                  value={options.textSource}
+                  onChange={handleChange('textSource')}
+                  size="small"
+                  fullWidth
+                >
+                  {TEXT_SOURCE_OPTIONS.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                  ))}
+                </TextField>
+
+                <TextField
+                  select
+                  label="Image source"
+                  value={options.imageSource}
+                  onChange={handleChange('imageSource')}
+                  size="small"
+                  fullWidth
+                >
+                  {IMAGE_SOURCE_OPTIONS.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                  ))}
+                </TextField>
+
+                <TextField
+                  label="Section title"
+                  value={options.sectionTitle}
+                  onChange={handleChange('sectionTitle')}
+                  size="small"
+                  fullWidth
+                />
+
+                <TextField
+                  label="Brand label"
+                  value={options.brandLabel}
+                  onChange={handleChange('brandLabel')}
+                  size="small"
+                  fullWidth
+                />
+
+                <TextField
+                  select
+                  label="Layout"
+                  value={options.layout}
+                  onChange={handleChange('layout')}
+                  size="small"
+                  fullWidth
+                >
+                  {LAYOUT_OPTIONS.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                  ))}
+                </TextField>
+
+                <TextField
+                  select
+                  label="Theme"
+                  value={options.theme}
+                  onChange={handleChange('theme')}
+                  size="small"
+                  fullWidth
+                >
+                  {THEME_OPTIONS.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                  ))}
+                </TextField>
+
+                <FormControlLabel
+                  control={<Checkbox checked={options.showReviewerName} onChange={handleCheck('showReviewerName')} />}
+                  label="Show reviewer name"
+                />
+                <FormControlLabel
+                  control={<Checkbox checked={options.showRating} onChange={handleCheck('showRating')} />}
+                  label="Show rating"
+                />
+                <FormControlLabel
+                  control={<Checkbox checked={options.showProductTitle} onChange={handleCheck('showProductTitle')} />}
+                  label="Show product title"
+                />
+                <FormControlLabel
+                  control={<Checkbox checked={options.onlyPermissionGranted} onChange={handleCheck('onlyPermissionGranted')} />}
+                  label="Only permissionGranted reviews"
+                />
+                <FormControlLabel
+                  control={<Checkbox checked={options.onlyReadyPublished} onChange={handleCheck('onlyReadyPublished')} />}
+                  label="Only ready/published reviews"
+                />
+
+                <Alert severity="info">
+                  Eligible reviews with current settings: {eligibleCount}
+                </Alert>
+
+                {eligibleCount === 0 && (
+                  <Alert severity="warning">
+                    No eligible reviews found. Update filters or sources to generate storefront cards.
+                  </Alert>
+                )}
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 7 }}>
+          <Stack spacing={2}>
+            <Card variant="outlined">
+              <CardContent>
+                <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<ContentCopyOutlined />}
+                    onClick={handleCopy}
+                    disabled={!generatedCode}
+                  >
+                    Copy Code
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<DownloadOutlined />}
+                    onClick={handleDownload}
+                    disabled={!generatedCode}
+                  >
+                    Download .html file
+                  </Button>
+                </Stack>
+
+                {copyMessage && (
+                  <Alert severity="success" sx={{ mb: 1 }}>
+                    {copyMessage}
+                  </Alert>
+                )}
+
+                <TextField
+                  multiline
+                  minRows={18}
+                  maxRows={30}
+                  value={generatedCode}
+                  slotProps={{ htmlInput: { readOnly: true } }}
+                  placeholder="Generated Shopify-ready code appears here"
+                  fullWidth
+                />
+              </CardContent>
+            </Card>
+
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="h6" sx={{ mb: 1 }}>
+                  Preview
+                </Typography>
+                {generatedCode ? (
+                  <Box
+                    component="iframe"
+                    title="Shopify review section preview"
+                    srcDoc={generatedCode}
+                    sx={{
+                      width: '100%',
+                      minHeight: 540,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                      backgroundColor: '#fff',
+                    }}
+                  />
+                ) : (
+                  <Alert severity="info">Generate code to preview the section.</Alert>
+                )}
+              </CardContent>
+            </Card>
+          </Stack>
+        </Grid>
+      </Grid>
+    </Box>
+  );
+}

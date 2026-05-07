@@ -18,6 +18,7 @@ import DashboardOutlined from '@mui/icons-material/DashboardOutlined';
 import RateReviewOutlined from '@mui/icons-material/RateReviewOutlined';
 import AddCircleOutlined from '@mui/icons-material/AddCircleOutlined';
 import QrCodeOutlined from '@mui/icons-material/QrCodeOutlined';
+import CodeIcon from '@mui/icons-material/Code';
 import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
 import LogoutOutlined from '@mui/icons-material/LogoutOutlined';
 import { logoutAdmin } from '../firebase/authService';
@@ -29,6 +30,7 @@ const navItems = [
   { label: 'Reviews', path: '/reviews', icon: <RateReviewOutlined />, exact: true },
   { label: 'Add Review', path: '/reviews/new', icon: <AddCircleOutlined /> },
   { label: 'Review Requests', path: '/review-requests', icon: <QrCodeOutlined /> },
+  { label: 'HTML Generator', path: '/html-generator', icon: <CodeIcon /> },
   { label: 'Settings', path: '/settings', icon: <SettingsOutlined /> },
 ];
 

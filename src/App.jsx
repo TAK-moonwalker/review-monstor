@@ -11,6 +11,7 @@ import ReviewRequests from './pages/ReviewRequests';
 import PublicReviewForm from './pages/PublicReviewForm';
 import ThankYou from './pages/ThankYou';
 import Settings from './pages/Settings';
+import HtmlCodeGenerator from './pages/HtmlCodeGenerator';
 
 export default function App() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="reviews/new" element={<ReviewForm />} />
         <Route path="reviews/:id/edit" element={<ReviewEdit />} />
         <Route path="review-requests" element={<ReviewRequests />} />
+        <Route path="html-generator" element={<HtmlCodeGenerator />} />
         <Route path="settings" element={<Settings />} />
       </Route>
 
