@@ -1,0 +1,7 @@
+[
+  {
+    "origin": ["http://localhost:5173", "https://review-monster-80750.web.app", "https://review-monster-80750.firebaseapp.com"],
+    "method": ["GET"],
+    "maxAgeSeconds": 3600
+  }
+]

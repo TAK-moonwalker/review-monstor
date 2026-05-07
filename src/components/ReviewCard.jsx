@@ -13,12 +13,16 @@ import {
 } from '@mui/material';
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import DeleteOutlined from '@mui/icons-material/DeleteOutlined';
+import PhotoCamera from '@mui/icons-material/PhotoCamera';
 import VerifiedOutlined from '@mui/icons-material/VerifiedOutlined';
 import CheckCircleOutlineOutlined from '@mui/icons-material/CheckCircleOutlineOutlined';
 import ReviewStatusChip from './ReviewStatusChip';
+import SnsCardGeneratorDialog from './SnsCardGeneratorDialog';
 import { formatDate } from '../utils/dateUtils';
+import { useState } from 'react';
 
 export default function ReviewCard({ review, onEdit, onDelete }) {
+  const [snsDialogOpen, setSnsDialogOpen] = useState(false);
   const displayText = review.body || review.cleanedTextJa || '';
 
   return (
@@ -108,6 +112,11 @@ export default function ReviewCard({ review, onEdit, onDelete }) {
       </CardContent>
 
       <CardActions sx={{ justifyContent: 'flex-end', pt: 0 }}>
+        <Tooltip title="Generate SNS Card">
+          <IconButton size="small" onClick={() => setSnsDialogOpen(true)} aria-label="generate sns card">
+            <PhotoCamera fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <Tooltip title="Edit">
           <IconButton size="small" onClick={() => onEdit(review)} aria-label="edit">
             <EditOutlined fontSize="small" />
@@ -124,6 +133,12 @@ export default function ReviewCard({ review, onEdit, onDelete }) {
           </IconButton>
         </Tooltip>
       </CardActions>
+
+      <SnsCardGeneratorDialog
+        open={snsDialogOpen}
+        onClose={() => setSnsDialogOpen(false)}
+        review={review}
+      />
     </Card>
   );
 }
