@@ -1,6 +1,13 @@
 [
   {
-    "origin": ["http://localhost:5173", "https://review-monster-80750.web.app", "https://review-monster-80750.firebaseapp.com"],
+    "origin": [
+      "http://localhost:5173",
+      "https://review-monster-80750.web.app",
+      "https://review-monster-80750.firebaseapp.com",
+      "https://sulci.co.jp",
+      "https://shopify.sulci.co.jp",
+      "https://sulciglobal.com"
+    ],
     "method": ["GET"],
     "maxAgeSeconds": 3600
   }

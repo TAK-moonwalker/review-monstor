@@ -7,5 +7,12 @@ endpoints:
     entryPoint: submitReviewByToken
     callableTrigger: {}
     maxInstances: 10
+  publicReviews:
+    platform: gcfv2
+    region:
+      - us-central1
+    entryPoint: publicReviews
+    httpsTrigger: {}
+    maxInstances: 10
 requiredAPIs: []
 extensions: {}

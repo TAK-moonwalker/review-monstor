@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import ContentCopyOutlined from '@mui/icons-material/ContentCopyOutlined';
 import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
+import OpenInNewOutlined from '@mui/icons-material/OpenInNewOutlined';
 import { useReviews } from '../hooks/useReviews';
 import LoadingScreen from '../components/LoadingScreen';
 import { generateShopifyReviewHtml } from '../utils/generateShopifyReviewHtml';
@@ -44,6 +45,7 @@ const THEME_OPTIONS = [
 
 const INITIAL_OPTIONS = {
   cardCount: 6,
+  apiEndpoint: 'https://us-central1-review-monster-80750.cloudfunctions.net/publicReviews',
   textSource: 'shortQuote',
   imageSource: 'postcardImageUrl',
   sectionTitle: 'Customer Reviews',
@@ -115,6 +117,31 @@ export default function HtmlCodeGenerator() {
     URL.revokeObjectURL(url);
   };
 
+  const handleOpenPreview = () => {
+    if (!generatedCode) return;
+    const previewWindow = window.open('', '_blank');
+    if (!previewWindow) return;
+
+    previewWindow.document.open();
+    previewWindow.document.write(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shopify Review Preview</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #f6f7f8;
+      }
+    </style>
+  </head>
+  <body>${generatedCode}</body>
+</html>`);
+    previewWindow.document.close();
+  };
+
   return (
     <Box>
       <Typography variant="h5" fontWeight={700} gutterBottom>
@@ -147,6 +174,15 @@ export default function HtmlCodeGenerator() {
                   slotProps={{ htmlInput: { min: 1, max: 50 } }}
                   size="small"
                   fullWidth
+                />
+
+                <TextField
+                  label="Reviews API endpoint"
+                  value={options.apiEndpoint}
+                  onChange={handleChange('apiEndpoint')}
+                  size="small"
+                  fullWidth
+                  helperText="Shopify snippet calls this endpoint at runtime."
                 />
 
                 <TextField
@@ -247,6 +283,10 @@ export default function HtmlCodeGenerator() {
                     No eligible reviews found. Update filters or sources to generate storefront cards.
                   </Alert>
                 )}
+
+                <Alert severity="info">
+                  Generated HTML now fetches live reviews from the API endpoint, so you do not hardcode all review JSON.
+                </Alert>
               </Stack>
             </CardContent>
           </Card>
@@ -273,6 +313,14 @@ export default function HtmlCodeGenerator() {
                   >
                     Download .html file
                   </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<OpenInNewOutlined />}
+                    onClick={handleOpenPreview}
+                    disabled={!generatedCode}
+                  >
+                    Open Preview Tab
+                  </Button>
                 </Stack>
 
                 {copyMessage && (
@@ -295,26 +343,9 @@ export default function HtmlCodeGenerator() {
 
             <Card variant="outlined">
               <CardContent>
-                <Typography variant="h6" sx={{ mb: 1 }}>
-                  Preview
-                </Typography>
-                {generatedCode ? (
-                  <Box
-                    component="iframe"
-                    title="Shopify review section preview"
-                    srcDoc={generatedCode}
-                    sx={{
-                      width: '100%',
-                      minHeight: 540,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                      backgroundColor: '#fff',
-                    }}
-                  />
-                ) : (
-                  <Alert severity="info">Generate code to preview the section.</Alert>
-                )}
+                <Alert severity="info">
+                  Use Open Preview Tab to inspect the generated HTML in a separate browser tab.
+                </Alert>
               </CardContent>
             </Card>
           </Stack>

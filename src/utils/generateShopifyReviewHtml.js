@@ -1,5 +1,9 @@
 const DEFAULT_OPTIONS = {
   cardCount: 6,
+  apiEndpoint: 'https://us-central1-review-monster-80750.cloudfunctions.net/publicReviews',
+  useProductHandle: false,
+  imageWidth: 1080,
+  imageHeight: 1080,
   textSource: 'shortQuote',
   imageSource: 'postcardImageUrl',
   sectionTitle: 'Customer Reviews',
@@ -31,51 +35,8 @@ function safeJson(value) {
     .replace(/\u2029/g, '\\u2029');
 }
 
-function toText(review, source) {
-  const raw = review?.[source];
-  return typeof raw === 'string' ? raw.trim() : '';
-}
-
-function toImageUrl(review, source) {
-  if (source === 'firstPictureUrl') {
-    const first = review?.pictureUrls?.[0];
-    return typeof first === 'string' ? first.trim() : '';
-  }
-  const raw = review?.postcardImageUrl;
-  return typeof raw === 'string' ? raw.trim() : '';
-}
-
-function toRating(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(5, Math.round(n)));
-}
-
-export function generateShopifyReviewHtml(reviews, options) {
+export function generateShopifyReviewHtml(_reviews, options) {
   const opts = { ...DEFAULT_OPTIONS, ...(options || {}) };
-
-  const filtered = (Array.isArray(reviews) ? reviews : [])
-    .filter((review) => {
-      if (opts.onlyPermissionGranted && review?.permissionGranted !== true) return false;
-      if (opts.onlyReadyPublished) {
-        const status = String(review?.status || '').toLowerCase();
-        if (status !== 'ready' && status !== 'published') return false;
-      }
-      return true;
-    })
-    .map((review, index) => {
-      const text = toText(review, opts.textSource);
-      const imageUrl = toImageUrl(review, opts.imageSource);
-      return {
-        id: String(review?.id || 'review-' + index),
-        reviewerName: String(review?.reviewerName || '').trim(),
-        rating: toRating(review?.rating),
-        productTitle: String(review?.productTitle || '').trim(),
-        text,
-        imageUrl,
-      };
-    })
-    .filter((item) => item.text && item.imageUrl);
 
   const sectionTitle = escapeHtml(opts.sectionTitle || 'Customer Reviews');
   const brandLabel = escapeHtml(opts.brandLabel || 'Review Monster');
@@ -84,6 +45,12 @@ export function generateShopifyReviewHtml(reviews, options) {
 
   const runtimeOptions = {
     cardCount: Math.max(1, Number(opts.cardCount) || 6),
+    apiEndpoint: String(opts.apiEndpoint || '').trim(),
+    useProductHandle: !!opts.useProductHandle,
+    imageWidth: Math.max(1, Number(opts.imageWidth) || 1080),
+    imageHeight: Math.max(1, Number(opts.imageHeight) || 1080),
+    textSource: opts.textSource,
+    imageSource: opts.imageSource,
     layout,
     theme,
     showReviewerName: !!opts.showReviewerName,
@@ -102,7 +69,7 @@ export function generateShopifyReviewHtml(reviews, options) {
   <div class="myshop-review-modal-overlay" aria-hidden="true">
     <div class="myshop-review-modal" role="dialog" aria-modal="true" aria-label="Review details">
       <button type="button" class="myshop-review-modal-close" aria-label="Close">&times;</button>
-      <img class="myshop-review-modal-image" alt="Review image" />
+      <img class="myshop-review-modal-image" alt="Review image" width="${Math.max(1, Number(opts.imageWidth) || 1080)}" height="${Math.max(1, Number(opts.imageHeight) || 1080)}" />
       <div class="myshop-review-modal-content">
         <p class="myshop-review-modal-text"></p>
         <div class="myshop-review-modal-meta"></div>
@@ -111,7 +78,6 @@ export function generateShopifyReviewHtml(reviews, options) {
   </div>
 
   <script type="application/json" class="myshop-review-options">${safeJson(runtimeOptions)}</script>
-  <script type="application/json" class="myshop-review-data">${safeJson(filtered)}</script>
 </section>
 
 <style>
@@ -219,8 +185,10 @@ export function generateShopifyReviewHtml(reviews, options) {
   .myshop-review-card-image {
     display: block;
     width: 100%;
-    aspect-ratio: 1 / 1;
-    object-fit: cover;
+    height: auto;
+    max-height: 420px;
+    object-fit: contain;
+    object-position: center;
     background: #efefef;
   }
 
@@ -241,7 +209,7 @@ export function generateShopifyReviewHtml(reviews, options) {
   }
 
   .myshop-review-card-text {
-    margin: 0 0 10px;
+    margin: 0;
     padding-left: 14px;
     color: var(--myshop-text);
     font-size: 14px;
@@ -254,9 +222,16 @@ export function generateShopifyReviewHtml(reviews, options) {
 
   .myshop-review-card-meta {
     display: grid;
+    margin-top: 8px;
     gap: 4px;
     color: var(--myshop-muted);
     font-size: 12px;
+  }
+
+  .myshop-review-empty {
+    margin: 0;
+    color: var(--myshop-muted);
+    font-size: 14px;
   }
 
   .myshop-review-stars {
@@ -308,8 +283,10 @@ export function generateShopifyReviewHtml(reviews, options) {
   .myshop-review-modal-image {
     display: block;
     width: 100%;
-    aspect-ratio: 1 / 1;
-    object-fit: cover;
+    max-height: min(70vh, 780px);
+    height: auto;
+    object-fit: contain;
+    object-position: center;
     background: #efefef;
   }
 
@@ -377,15 +354,90 @@ export function generateShopifyReviewHtml(reviews, options) {
     }
   }
 
-  function shuffle(list) {
-    var clone = list.slice();
-    for (var i = clone.length - 1; i > 0; i -= 1) {
-      var j = Math.floor(Math.random() * (i + 1));
-      var temp = clone[i];
-      clone[i] = clone[j];
-      clone[j] = temp;
+  function toRating(value) {
+    var n = Number(value) || 0;
+    return Math.max(0, Math.min(5, Math.round(n)));
+  }
+
+  function toStringSafe(value) {
+    return typeof value === 'string' ? value.trim() : '';
+  }
+
+  function resolveProductHandle() {
+    try {
+      if (
+        window.ShopifyAnalytics &&
+        window.ShopifyAnalytics.meta &&
+        window.ShopifyAnalytics.meta.product &&
+        window.ShopifyAnalytics.meta.product.handle
+      ) {
+        return String(window.ShopifyAnalytics.meta.product.handle || '').trim();
+      }
+    } catch (e) {
+      // Ignore and continue to URL fallback.
     }
-    return clone;
+
+    var path = String(window.location.pathname || '');
+    var productPathIndex = path.indexOf('/products/');
+    if (productPathIndex === -1) return '';
+
+    var slug = path.slice(productPathIndex + '/products/'.length);
+    slug = slug.split('/')[0].split('?')[0].split('#')[0];
+    return slug ? decodeURIComponent(slug).trim() : '';
+  }
+
+  function toApiUrl(options) {
+    var endpoint = toStringSafe(options.apiEndpoint);
+    if (!endpoint) return '';
+
+    var count = Math.max(1, Number(options.cardCount) || 6);
+    var poolLimit = Math.max(count, Math.min(60, count * 4));
+    var shouldUseProductHandle = options.useProductHandle === true;
+    var productHandle = shouldUseProductHandle ? resolveProductHandle() : '';
+
+    try {
+      var url = new URL(endpoint, window.location.href);
+      url.searchParams.set('limit', String(count));
+      url.searchParams.set('poolLimit', String(poolLimit));
+      if (productHandle) {
+        url.searchParams.set('productHandle', productHandle);
+      }
+      return url.toString();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function normalizeReview(raw, options) {
+    if (!raw || typeof raw !== 'object') return null;
+
+    var image = '';
+    if (options.imageSource === 'firstPictureUrl') {
+      image = toStringSafe(raw.firstPictureUrl);
+    }
+    if (!image) {
+      image = toStringSafe(raw.postcardImageUrl);
+    }
+
+    var textKey = toStringSafe(options.textSource) || 'shortQuote';
+    var text = toStringSafe(raw[textKey]);
+    if (!text) {
+      text = toStringSafe(raw.shortQuote) ||
+        toStringSafe(raw.translationEn) ||
+        toStringSafe(raw.cleanedTextJa) ||
+        toStringSafe(raw.body);
+    }
+
+    if (!image || !text) return null;
+
+    return {
+      id: toStringSafe(raw.id),
+      reviewerName: toStringSafe(raw.reviewerName),
+      rating: toRating(raw.rating),
+      productTitle: toStringSafe(raw.productTitle),
+      imageUrl: image,
+      text: text,
+    };
   }
 
   function stars(rating) {
@@ -399,7 +451,6 @@ export function generateShopifyReviewHtml(reviews, options) {
     section.setAttribute('data-myshop-mounted', 'true');
 
     var options = parseJsonFrom(section, '.myshop-review-options', {});
-    var data = parseJsonFrom(section, '.myshop-review-data', []);
     var list = section.querySelector('.myshop-review-list');
     var overlay = section.querySelector('.myshop-review-modal-overlay');
     var modal = section.querySelector('.myshop-review-modal');
@@ -411,7 +462,14 @@ export function generateShopifyReviewHtml(reviews, options) {
     if (!list) return;
 
     var count = Math.max(1, Number(options.cardCount) || 6);
-    var display = shuffle(Array.isArray(data) ? data : []).slice(0, count);
+
+    function renderEmpty(text) {
+      list.innerHTML = '';
+      var empty = document.createElement('p');
+      empty.className = 'myshop-review-empty';
+      empty.textContent = text || 'No reviews available right now.';
+      list.appendChild(empty);
+    }
 
     function openModal(item) {
       if (!overlay || !modalImage || !modalText || !modalMeta) return;
@@ -451,7 +509,14 @@ export function generateShopifyReviewHtml(reviews, options) {
       if (modalImage) modalImage.src = '';
     }
 
-    display.forEach(function (item) {
+    function renderCards(display) {
+      list.innerHTML = '';
+      if (!Array.isArray(display) || display.length === 0) {
+        renderEmpty('No reviews available right now.');
+        return;
+      }
+
+      display.forEach(function (item) {
       var card = document.createElement('button');
       card.type = 'button';
       card.className = 'myshop-review-card';
@@ -461,6 +526,8 @@ export function generateShopifyReviewHtml(reviews, options) {
       image.className = 'myshop-review-card-image';
       image.src = item.imageUrl || '';
       image.alt = item.productTitle ? item.productTitle : 'Review image';
+      image.setAttribute('width', String(Math.max(1, Number(options.imageWidth) || 1080)));
+      image.setAttribute('height', String(Math.max(1, Number(options.imageHeight) || 1080)));
 
       var body = document.createElement('div');
       body.className = 'myshop-review-card-body';
@@ -502,7 +569,43 @@ export function generateShopifyReviewHtml(reviews, options) {
         openModal(item);
       });
       list.appendChild(card);
-    });
+      });
+    }
+
+    var endpointUrl = toApiUrl(options);
+    if (!endpointUrl) {
+      renderEmpty('Set a valid API endpoint to load reviews.');
+      return;
+    }
+
+    fetch(endpointUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    })
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error('Request failed');
+        }
+        return response.json();
+      })
+      .then(function (payload) {
+        var reviews = Array.isArray(payload && payload.reviews) ? payload.reviews : [];
+        var normalized = reviews
+          .map(function (item) {
+            return normalizeReview(item, options);
+          })
+          .filter(function (item) {
+            return !!item;
+          })
+          .slice(0, count);
+
+        renderCards(normalized);
+      })
+      .catch(function () {
+        renderEmpty('Could not load reviews. Please try again later.');
+      });
 
     if (closeButton) {
       closeButton.addEventListener('click', closeModal);
