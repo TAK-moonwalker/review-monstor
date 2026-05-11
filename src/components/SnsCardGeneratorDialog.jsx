@@ -36,7 +36,8 @@ const LAYOUT_OPTIONS = [
 ];
 
 const TEXT_OPTIONS = [
-  { value: 'shortQuote',    label: 'Short Quote' },
+  { value: 'shortQuoteJa',  label: 'Short Quote (Japanese)' },
+  { value: 'shortQuoteEn',  label: 'Short Quote (English)' },
   { value: 'translationEn', label: 'English Translation' },
   { value: 'cleanedTextJa', label: 'Cleaned Japanese' },
   { value: 'custom',        label: 'Custom Text' },
@@ -46,7 +47,7 @@ export default function SnsCardGeneratorDialog({ open, onClose, review }) {
   const cardRef = useRef(null);
 
   const [layout, setLayout]                   = useState('minimal-white');
-  const [textMode, setTextMode]               = useState('shortQuote');
+  const [textMode, setTextMode]               = useState('shortQuoteEn');
   const [customText, setCustomText]           = useState('');
   const [imageMode, setImageMode]             = useState(() => {
     if (review?.postcardImageUrl) return 'postcardImageUrl';

@@ -4,7 +4,7 @@ const DEFAULT_OPTIONS = {
   useProductHandle: false,
   imageWidth: 1080,
   imageHeight: 1080,
-  textSource: 'shortQuote',
+  textSource: 'shortQuoteEn',
   imageSource: 'postcardImageUrl',
   sectionTitle: 'Customer Reviews',
   brandLabel: 'Review Monster',
@@ -419,10 +419,12 @@ export function generateShopifyReviewHtml(_reviews, options) {
       image = toStringSafe(raw.postcardImageUrl);
     }
 
-    var textKey = toStringSafe(options.textSource) || 'shortQuote';
+    var textKey = toStringSafe(options.textSource) || 'shortQuoteEn';
     var text = toStringSafe(raw[textKey]);
     if (!text) {
-      text = toStringSafe(raw.shortQuote) ||
+      text = toStringSafe(raw.shortQuoteEn) ||
+        toStringSafe(raw.shortQuoteJa) ||
+        toStringSafe(raw.shortQuote) ||
         toStringSafe(raw.translationEn) ||
         toStringSafe(raw.cleanedTextJa) ||
         toStringSafe(raw.body);

@@ -21,7 +21,8 @@ import LoadingScreen from '../components/LoadingScreen';
 import { generateShopifyReviewHtml } from '../utils/generateShopifyReviewHtml';
 
 const TEXT_SOURCE_OPTIONS = [
-  { value: 'shortQuote', label: 'shortQuote' },
+  { value: 'shortQuoteJa', label: 'shortQuoteJa' },
+  { value: 'shortQuoteEn', label: 'shortQuoteEn' },
   { value: 'translationEn', label: 'translationEn' },
   { value: 'cleanedTextJa', label: 'cleanedTextJa' },
   { value: 'body', label: 'body' },
@@ -46,7 +47,7 @@ const THEME_OPTIONS = [
 const INITIAL_OPTIONS = {
   cardCount: 6,
   apiEndpoint: 'https://us-central1-review-monster-80750.cloudfunctions.net/publicReviews',
-  textSource: 'shortQuote',
+  textSource: 'shortQuoteEn',
   imageSource: 'postcardImageUrl',
   sectionTitle: 'Customer Reviews',
   brandLabel: 'Review Monster',

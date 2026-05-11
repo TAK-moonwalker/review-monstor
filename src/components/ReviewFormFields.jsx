@@ -194,12 +194,20 @@ export default function ReviewFormFields({ form, setForm }) {
         fullWidth
       />
 
-      <TextField
-        label="Short Quote"
-        value={form.shortQuote || ''}
-        onChange={f('shortQuote')}
-        fullWidth
-      />
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <TextField
+          label="Short Quote (Japanese)"
+          value={form.shortQuoteJa || ''}
+          onChange={f('shortQuoteJa')}
+          fullWidth
+        />
+        <TextField
+          label="Short Quote (English)"
+          value={form.shortQuoteEn || ''}
+          onChange={f('shortQuoteEn')}
+          fullWidth
+        />
+      </Stack>
 
       <TextField
         label="Reply"

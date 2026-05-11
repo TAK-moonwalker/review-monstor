@@ -282,7 +282,8 @@ exports.publicReviews = onRequest(async (req, res) => {
         reviewerName: String(data.reviewerName || "").trim(),
         rating: Number(data.rating) || 0,
         productTitle: String(data.productTitle || "").trim(),
-        shortQuote: String(data.shortQuote || "").trim(),
+        shortQuoteJa: String(data.shortQuoteJa || "").trim(),
+        shortQuoteEn: String(data.shortQuoteEn || "").trim(),
         translationEn: String(data.translationEn || "").trim(),
         cleanedTextJa: String(data.cleanedTextJa || "").trim(),
         body: String(data.body || "").trim(),
@@ -301,7 +302,8 @@ exports.publicReviews = onRequest(async (req, res) => {
 
       const hasImage = !!(item.postcardImageUrl || item.firstPictureUrl);
       const hasText = !!(
-        item.shortQuote ||
+        item.shortQuoteJa ||
+        item.shortQuoteEn ||
         item.translationEn ||
         item.cleanedTextJa ||
         item.body
