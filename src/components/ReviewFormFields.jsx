@@ -150,17 +150,25 @@ export default function ReviewFormFields({ form, setForm }) {
       {/* ── 3. Review Text ────────────────────────────────────────── */}
       <SectionHeader title="3. Review Text" />
 
-      <TextField
-        label="Title"
-        value={form.title || ''}
-        onChange={f('title')}
-        fullWidth
-      />
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <TextField
+          label="Japanese Title"
+          value={form.titleJa || ''}
+          onChange={f('titleJa')}
+          fullWidth
+        />
+        <TextField
+          label="English Title"
+          value={form.titleEn || ''}
+          onChange={f('titleEn')}
+          fullWidth
+        />
+      </Stack>
 
       <TextField
-        label="Body"
-        value={form.body || ''}
-        onChange={f('body')}
+        label="Japanese Body"
+        value={form.bodyJa || ''}
+        onChange={f('bodyJa')}
         multiline
         rows={4}
         fullWidth
@@ -168,27 +176,18 @@ export default function ReviewFormFields({ form, setForm }) {
       />
 
       <TextField
+        label="English Body"
+        value={form.bodyEn || ''}
+        onChange={f('bodyEn')}
+        multiline
+        rows={4}
+        fullWidth
+      />
+
+      <TextField
         label="Original Text (Japanese)"
         value={form.originalTextJa || ''}
         onChange={f('originalTextJa')}
-        multiline
-        rows={3}
-        fullWidth
-      />
-
-      <TextField
-        label="Cleaned Text (Japanese)"
-        value={form.cleanedTextJa || ''}
-        onChange={f('cleanedTextJa')}
-        multiline
-        rows={3}
-        fullWidth
-      />
-
-      <TextField
-        label="Translation (English)"
-        value={form.translationEn || ''}
-        onChange={f('translationEn')}
         multiline
         rows={3}
         fullWidth

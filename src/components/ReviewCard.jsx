@@ -23,7 +23,8 @@ import { useState } from 'react';
 
 export default function ReviewCard({ review, onEdit, onDelete }) {
   const [snsDialogOpen, setSnsDialogOpen] = useState(false);
-  const displayText = review.body || review.cleanedTextJa || '';
+  const displayTitle = review.titleJa || review.titleEn || review.title || '';
+  const displayText = review.bodyJa || review.bodyEn || review.body || review.cleanedTextJa || '';
 
   return (
     <Card variant="outlined" sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -69,9 +70,9 @@ export default function ReviewCard({ review, onEdit, onDelete }) {
         <Rating value={Number(review.rating) || 0} readOnly size="small" sx={{ mt: 0.5 }} />
 
         {/* Title */}
-        {review.title && (
+        {displayTitle && (
           <Typography variant="body2" fontWeight={600} sx={{ mt: 0.75 }}>
-            {review.title}
+            {displayTitle}
           </Typography>
         )}
 

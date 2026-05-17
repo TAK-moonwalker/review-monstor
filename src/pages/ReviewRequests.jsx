@@ -24,6 +24,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { useReviewRequests } from '../hooks/useReviewRequests';
 import { createReviewRequest, deleteReviewRequest } from '../firebase/requestService';
 import { generateToken } from '../utils/generateToken';
+import { useAuth } from '../hooks/useAuth';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingScreen from '../components/LoadingScreen';
 import EmptyState from '../components/EmptyState';
@@ -41,6 +42,7 @@ const INITIAL_FORM = {
 };
 
 export default function ReviewRequests() {
+  const { user } = useAuth();
   const { requests, loading } = useReviewRequests();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
@@ -56,7 +58,7 @@ export default function ReviewRequests() {
     setSaving(true);
     const token = generateToken();
     const expiresAt = form.expiresAt ? new Date(form.expiresAt) : null;
-    await createReviewRequest({ ...form, token, expiresAt });
+    await createReviewRequest(user.uid, { ...form, token, expiresAt });
     setForm(INITIAL_FORM);
     setSaving(false);
     setDialogOpen(false);

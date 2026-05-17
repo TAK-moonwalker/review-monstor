@@ -38,8 +38,8 @@ const LAYOUT_OPTIONS = [
 const TEXT_OPTIONS = [
   { value: 'shortQuoteJa',  label: 'Short Quote (Japanese)' },
   { value: 'shortQuoteEn',  label: 'Short Quote (English)' },
-  { value: 'translationEn', label: 'English Translation' },
-  { value: 'cleanedTextJa', label: 'Cleaned Japanese' },
+  { value: 'bodyEn',        label: 'English Body' },
+  { value: 'bodyJa',        label: 'Japanese Body' },
   { value: 'custom',        label: 'Custom Text' },
 ];
 

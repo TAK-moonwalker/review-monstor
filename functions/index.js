@@ -186,10 +186,12 @@ exports.submitReviewByToken = onCall(async (request) => {
     }
   }
 
-  // Read settings for coupon data and default status
-  const settingsSnap = await db
-      .collection("settings").doc("app").get();
-  const settings = settingsSnap.exists ? settingsSnap.data() : {};
+  // Read settings for the store owner (identified by uid on the review request)
+  const settingsSnap = reqData.uid ?
+    await db.collection("settings").doc(reqData.uid).get() :
+    null;
+  const settings = (settingsSnap && settingsSnap.exists) ?
+    settingsSnap.data() : {};
 
   // Atomic write: create review + mark request used
   const reviewRef = db.collection("reviews").doc();
@@ -204,6 +206,7 @@ exports.submitReviewByToken = onCall(async (request) => {
     }
 
     tx.set(reviewRef, {
+      uid: reqData.uid || null,
       reviewerName: reviewerName || "",
       reviewerEmail: reviewerEmail || "",
       rating,

@@ -7,6 +7,7 @@ import {
   updateDoc,
   deleteDoc,
   query,
+  where,
   orderBy,
   serverTimestamp,
   onSnapshot,
@@ -25,9 +26,11 @@ const defaults = {
   productTitle: '',
   isBrandTestimonial: false,
   title: '',
+  titleJa: '',
+  titleEn: '',
   originalTextJa: '',
-  cleanedTextJa: '',
-  translationEn: '',
+  bodyJa: '',
+  bodyEn: '',
   body: '',
   shortQuoteJa: '',
   shortQuoteEn: '',
@@ -40,8 +43,9 @@ const defaults = {
   reviewDate: null,
 };
 
-export const createReview = (data) =>
+export const createReview = (uid, data) =>
   addDoc(collection(db, COL), {
+    uid,
     ...defaults,
     ...data,
     createdAt: serverTimestamp(),
@@ -58,8 +62,8 @@ export const updateReview = (id, data) =>
 
 export const deleteReview = (id) => deleteDoc(doc(db, COL, id));
 
-export const subscribeReviews = (callback, onError) => {
-  const q = query(collection(db, COL), orderBy('createdAt', 'desc'));
+export const subscribeReviews = (uid, callback, onError) => {
+  const q = query(collection(db, COL), where('uid', '==', uid), orderBy('createdAt', 'desc'));
   return onSnapshot(
     q,
     (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
@@ -78,5 +82,5 @@ export const markReviewsAsExported = (ids) => {
   return batch.commit();
 };
 
-// Legacy alias
+// Legacy alias (uid, data)
 export const addReview = createReview;

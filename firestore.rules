@@ -42,8 +42,9 @@ service cloud.firestore {
 
     // ── reviews ───────────────────────────────────────────────────────────────
     match /reviews/{reviewId} {
-      // Admins: full access
-      allow read, write: if isAdmin();
+      // Admins: access only their own documents
+      allow create: if isAdmin() && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if isAdmin() && resource.data.uid == request.auth.uid;
 
       // Public: create only (submit review via public form)
       // Validates minimum required fields and blocks status manipulation.
@@ -59,11 +60,15 @@ service cloud.firestore {
 
     // ── reviewRequests ────────────────────────────────────────────────────────
     match /reviewRequests/{requestId} {
-      // Admins: full access
-      allow read, write: if isAdmin();
+      // Admins: access only their own documents
+      allow create: if isAdmin() && request.resource.data.uid == request.auth.uid;
+      allow read, update, delete: if isAdmin() && resource.data.uid == request.auth.uid;
 
-      // Public: read a single request by document ID (for token lookup via getDocs query)
-      // Note: reading the full collection is blocked; only query by token is used in code.
+      // Public: query a single request by token (getDocs uses `list`, not `get`).
+      // Limit <= 1 prevents full collection scans.
+      allow list: if request.auth == null && request.query.limit <= 1;
+
+      // Public: get by document ID (kept for potential direct-ID lookups)
       allow get: if true;
 
       // Public: mark request as used after submitting review
@@ -77,8 +82,8 @@ service cloud.firestore {
 
     // ── settings ──────────────────────────────────────────────────────────────
     match /settings/{docId} {
-      // Admins: full access
-      allow read, write: if isAdmin();
+      // Admins: access only their own settings document
+      allow read, write: if isAdmin() && docId == request.auth.uid;
 
       // Public: read-only (needed for reviewFormTitle, coupon etc. on public pages)
       allow read: if true;

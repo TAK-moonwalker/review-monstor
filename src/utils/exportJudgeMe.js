@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 
-export const exportJudgeMeReviews = (reviews) => {
+export const exportJudgeMeReviews = (reviews, language = 'en') => {
   const eligible = reviews.filter(
     (r) =>
       r.permissionGranted === true &&
@@ -14,16 +14,25 @@ export const exportJudgeMeReviews = (reviews) => {
       ...(Array.isArray(r.pictureUrls) ? r.pictureUrls : []),
     ];
 
+    const title =
+      language === 'ja'
+        ? r.titleJa || r.titleEn || r.title || ''
+        : r.titleEn || r.titleJa || r.title || '';
+    const body =
+      language === 'ja'
+        ? r.bodyJa || r.bodyEn || r.body || ''
+        : r.bodyEn || r.bodyJa || r.body || '';
+
     return {
       product_handle: r.productHandle || '',
       reviewer_name: r.reviewerName || '',
       reviewer_email: r.reviewerEmail || '',
       rating: r.rating ?? '',
-      title: r.title || '',
-      body: r.body || r.cleanedTextJa || r.translationEn || '',
+      title,
+      body,
       review_date: r.reviewDate || '',
-      picture_urls: pics.join(', '),
-      verified: r.verified ? 'TRUE' : 'FALSE',
+      picture_urls: pics.join(' '),
+      verified: r.verified ? 'true' : 'false',
       reply: r.reply || '',
     };
   });
@@ -33,7 +42,7 @@ export const exportJudgeMeReviews = (reviews) => {
   XLSX.utils.book_append_sheet(wb, ws, 'Reviews');
 
   const date = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `judgeme_reviews_${date}.xlsx`);
+  XLSX.writeFile(wb, `judgeme_reviews_${date}.csv`, { bookType: 'csv' });
 
   return eligible.map((r) => r.id);
 };

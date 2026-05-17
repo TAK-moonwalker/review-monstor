@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import { createReview } from '../firebase/reviewService';
 import ReviewFormFields from '../components/ReviewFormFields';
+import { useAuth } from '../hooks/useAuth';
 
 const INITIAL = {
   source: 'manual',
@@ -23,9 +24,11 @@ const INITIAL = {
   productTitle: '',
   isBrandTestimonial: false,
   title: '',
+  titleJa: '',
+  titleEn: '',
   originalTextJa: '',
-  cleanedTextJa: '',
-  translationEn: '',
+  bodyJa: '',
+  bodyEn: '',
   body: '',
   shortQuoteJa: '',
   shortQuoteEn: '',
@@ -39,6 +42,7 @@ const INITIAL = {
 
 export default function ReviewForm() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [form, setForm] = useState(INITIAL);
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
@@ -48,7 +52,7 @@ export default function ReviewForm() {
 
   const validate = () => {
     if (!form.reviewerName) { showSnackbar('Reviewer name is required.', 'error'); return false; }
-    if (!form.body) { showSnackbar('Review body is required.', 'error'); return false; }
+    if (!form.bodyJa) { showSnackbar('Japanese body is required.', 'error'); return false; }
     return true;
   };
 
@@ -57,7 +61,7 @@ export default function ReviewForm() {
     if (!validate()) return;
     setLoading(true);
     try {
-      await createReview(form);
+      await createReview(user.uid, form);
       showSnackbar('Review saved successfully!');
       setTimeout(() => navigate('/reviews'), 1200);
     } catch {

@@ -15,8 +15,9 @@ import {
 
 const COL = 'reviewRequests';
 
-export const createReviewRequest = (data) =>
+export const createReviewRequest = (uid, data) =>
   addDoc(collection(db, COL), {
+    uid,
     token: data.token ?? '',
     customerName: data.customerName ?? '',
     customerEmail: data.customerEmail ?? '',
@@ -45,8 +46,8 @@ export const markRequestUsed = (id, reviewId) =>
     updatedAt: serverTimestamp(),
   });
 
-export const subscribeReviewRequests = (callback, onError) => {
-  const q = query(collection(db, COL), orderBy('createdAt', 'desc'));
+export const subscribeReviewRequests = (uid, callback, onError) => {
+  const q = query(collection(db, COL), where('uid', '==', uid), orderBy('createdAt', 'desc'));
   return onSnapshot(
     q,
     (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),

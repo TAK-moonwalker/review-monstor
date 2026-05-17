@@ -37,22 +37,29 @@ export default function PublicReviewForm() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    Promise.all([getReviewRequestByToken(token), getSettings()]).then(([req, s]) => {
-      setSettings(s);
-      if (!req) { setPageStatus('invalid'); return; }
-      if (req.used) { setPageStatus('used'); return; }
-      if (req.expiresAt) {
-        const expires = req.expiresAt?.toDate ? req.expiresAt.toDate() : new Date(req.expiresAt);
-        if (expires < new Date()) { setPageStatus('invalid'); return; }
+    const loadData = async () => {
+      try {
+        const req = await getReviewRequestByToken(token);
+        if (!req) { setPageStatus('invalid'); return; }
+        if (req.used) { setPageStatus('used'); return; }
+        if (req.expiresAt) {
+          const expires = req.expiresAt?.toDate ? req.expiresAt.toDate() : new Date(req.expiresAt);
+          if (expires < new Date()) { setPageStatus('invalid'); return; }
+        }
+        const s = req.uid ? await getSettings(req.uid) : {};
+        setSettings(s);
+        setRequest(req);
+        setForm((prev) => ({
+          ...prev,
+          reviewerName: req.customerName || '',
+          reviewerEmail: req.customerEmail || '',
+        }));
+        setPageStatus('valid');
+      } catch {
+        setPageStatus('invalid');
       }
-      setRequest(req);
-      setForm((prev) => ({
-        ...prev,
-        reviewerName: req.customerName || '',
-        reviewerEmail: req.customerEmail || '',
-      }));
-      setPageStatus('valid');
-    });
+    };
+    loadData();
   }, [token]);
 
   const set = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));

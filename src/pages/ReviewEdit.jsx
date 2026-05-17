@@ -34,7 +34,7 @@ export default function ReviewEdit() {
 
   const validate = () => {
     if (!form.reviewerName) { showSnackbar('Reviewer name is required.', 'error'); return false; }
-    if (!form.body) { showSnackbar('Review body is required.', 'error'); return false; }
+    if (!form.bodyJa) { showSnackbar('Japanese body is required.', 'error'); return false; }
     return true;
   };
 

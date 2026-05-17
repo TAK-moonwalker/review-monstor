@@ -7,15 +7,15 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 
-const REF = () => doc(db, 'settings', 'app');
+const REF = (uid) => doc(db, 'settings', uid);
 
-export const getSettings = async () => {
-  const snap = await getDoc(REF());
+export const getSettings = async (uid) => {
+  const snap = await getDoc(REF(uid));
   return snap.exists() ? snap.data() : {};
 };
 
-export const updateSettings = (data) =>
-  setDoc(REF(), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+export const updateSettings = (uid, data) =>
+  setDoc(REF(uid), { ...data, updatedAt: serverTimestamp() }, { merge: true });
 
-export const subscribeSettings = (callback, onError) =>
-  onSnapshot(REF(), (snap) => callback(snap.exists() ? snap.data() : {}), onError);
+export const subscribeSettings = (uid, callback, onError) =>
+  onSnapshot(REF(uid), (snap) => callback(snap.exists() ? snap.data() : {}), onError);

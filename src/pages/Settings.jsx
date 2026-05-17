@@ -16,6 +16,7 @@ import {
 import { useSettings } from '../hooks/useSettings';
 import { updateSettings } from '../firebase/settingsService';
 import LoadingScreen from '../components/LoadingScreen';
+import { useAuth } from '../hooks/useAuth';
 
 const INITIAL = {
   couponEnabled: false,
@@ -25,11 +26,13 @@ const INITIAL = {
   reviewFormDescription: '',
   defaultReviewStatus: 'pending',
   shopUrl: '',
+  judgeMeLanguage: 'en',
 };
 
 const STATUS_OPTIONS = ['pending', 'ready', 'published', 'rejected'];
 
 export default function Settings() {
+  const { user } = useAuth();
   const { settings, loading } = useSettings();
   const [form, setForm] = useState(INITIAL);
   const initialized = useRef(false);
@@ -51,7 +54,7 @@ export default function Settings() {
     setSaving(true);
     setError('');
     try {
-      await updateSettings(form);
+      await updateSettings(user.uid, form);
       setSuccess(true);
     } catch {
       setError('Failed to save settings.');
@@ -130,6 +133,20 @@ export default function Settings() {
                 {STATUS_OPTIONS.map((s) => (
                   <MenuItem key={s} value={s}>{s}</MenuItem>
                 ))}
+              </TextField>
+
+              {/* Judge.me Export */}
+              <Typography variant="subtitle1" fontWeight={600}>Judge.me Export</Typography>
+              <TextField
+                select
+                label="Export Language"
+                value={form.judgeMeLanguage}
+                onChange={(e) => set('judgeMeLanguage', e.target.value)}
+                fullWidth
+                helperText="Language used for title and body when exporting to Judge.me CSV"
+              >
+                <MenuItem value="en">English (English site)</MenuItem>
+                <MenuItem value="ja">Japanese (Japanese site)</MenuItem>
               </TextField>
 
               {/* Shop */}

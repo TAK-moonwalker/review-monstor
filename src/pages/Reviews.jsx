@@ -12,6 +12,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import FileDownloadOutlined from '@mui/icons-material/FileDownloadOutlined';
 import { useReviews } from '../hooks/useReviews';
+import { useSettings } from '../hooks/useSettings';
 import { deleteReview, markReviewsAsExported } from '../firebase/reviewService';
 import ReviewCard from '../components/ReviewCard';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -23,6 +24,7 @@ const SOURCES = ['all', 'manual', 'token', 'import', 'google', 'other'];
 
 export default function Reviews() {
   const { reviews, loading } = useReviews();
+  const { settings } = useSettings();
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
@@ -76,7 +78,8 @@ export default function Reviews() {
             variant="outlined"
             startIcon={<FileDownloadOutlined />}
             onClick={() => {
-              const ids = exportToJudgeMe(filtered);
+              const lang = settings.judgeMeLanguage || 'en';
+              const ids = exportToJudgeMe(filtered, lang);
               if (ids.length) markReviewsAsExported(ids);
             }}
           >
