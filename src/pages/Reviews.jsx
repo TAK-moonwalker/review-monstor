@@ -31,6 +31,16 @@ export default function Reviews() {
   const [productSearch, setProductSearch] = useState('');
   const [keyword, setKeyword] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [exportLang, setExportLang] = useState(settings.judgeMeLanguage || 'en');
+
+  const toggleSelect = (id) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  const clearSelection = () => setSelectedIds(new Set());
 
   if (loading) return <LoadingScreen />;
 
@@ -58,6 +68,8 @@ export default function Reviews() {
     }
   };
 
+  const selectAll = () => setSelectedIds(new Set(filtered.map((r) => r.id)));
+
   return (
     <Box>
       {/* Page header */}
@@ -74,17 +86,6 @@ export default function Reviews() {
           </Typography>
         </Typography>
         <Stack direction="row" spacing={1}>
-          <Button
-            variant="outlined"
-            startIcon={<FileDownloadOutlined />}
-            onClick={() => {
-              const lang = settings.judgeMeLanguage || 'en';
-              const ids = exportToJudgeMe(filtered, lang);
-              if (ids.length) markReviewsAsExported(ids);
-            }}
-          >
-            Export
-          </Button>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
@@ -139,6 +140,42 @@ export default function Reviews() {
         </TextField>
       </Stack>
 
+      {/* Export toolbar */}
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+        <TextField
+          select
+          label="Language"
+          value={exportLang}
+          onChange={(e) => setExportLang(e.target.value)}
+          size="small"
+          sx={{ minWidth: 100 }}
+        >
+          <MenuItem value="en">EN</MenuItem>
+          <MenuItem value="ja">JA</MenuItem>
+        </TextField>
+        <Button
+          variant="outlined"
+          startIcon={<FileDownloadOutlined />}
+          onClick={() => {
+            const toExport =
+              selectedIds.size > 0
+                ? filtered.filter((r) => selectedIds.has(r.id))
+                : filtered;
+            const ids = exportToJudgeMe(toExport, exportLang);
+            if (ids.length) markReviewsAsExported(ids, exportLang);
+          }}
+        >
+          {selectedIds.size > 0
+            ? `Export (${selectedIds.size} selected)`
+            : `Export All (${filtered.length})`}
+        </Button>
+        {selectedIds.size > 0 ? (
+          <Button size="small" onClick={clearSelection}>Clear selection</Button>
+        ) : (
+          <Button size="small" onClick={selectAll}>Select all</Button>
+        )}
+      </Stack>
+
       {/* Grid */}
       {filtered.length === 0 ? (
         <EmptyState message="No reviews match the current filters" />
@@ -148,6 +185,8 @@ export default function Reviews() {
             <Grid size={{ xs: 12, md: 6, lg: 4 }} key={review.id}>
               <ReviewCard
                 review={review}
+                selected={selectedIds.has(review.id)}
+                onToggle={toggleSelect}
                 onEdit={() => navigate(`/reviews/${review.id}/edit`)}
                 onDelete={(r) => setDeleteTarget(r)}
               />

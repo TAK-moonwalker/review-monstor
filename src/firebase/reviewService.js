@@ -39,7 +39,8 @@ const defaults = {
   verified: false,
   reply: '',
   permissionGranted: false,
-  exportedToJudgeMe: false,
+  exportedToJudgeMeEn: null,
+  exportedToJudgeMeJa: null,
   reviewDate: null,
 };
 
@@ -71,11 +72,12 @@ export const subscribeReviews = (uid, callback, onError) => {
   );
 };
 
-export const markReviewsAsExported = (ids) => {
+export const markReviewsAsExported = (ids, language) => {
+  const field = language === 'ja' ? 'exportedToJudgeMeJa' : 'exportedToJudgeMeEn';
   const batch = writeBatch(db);
   ids.forEach((id) =>
     batch.update(doc(db, COL, id), {
-      exportedToJudgeMe: true,
+      [field]: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
   );

@@ -4,6 +4,7 @@ import {
   CardActions,
   CardContent,
   CardMedia,
+  Checkbox,
   Chip,
   IconButton,
   Rating,
@@ -14,6 +15,7 @@ import {
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import DeleteOutlined from '@mui/icons-material/DeleteOutlined';
 import PhotoCamera from '@mui/icons-material/PhotoCamera';
+import FileDownloadOutlined from '@mui/icons-material/FileDownloadOutlined';
 import VerifiedOutlined from '@mui/icons-material/VerifiedOutlined';
 import CheckCircleOutlineOutlined from '@mui/icons-material/CheckCircleOutlineOutlined';
 import ReviewStatusChip from './ReviewStatusChip';
@@ -21,13 +23,33 @@ import SnsCardGeneratorDialog from './SnsCardGeneratorDialog';
 import { formatDate } from '../utils/dateUtils';
 import { useState } from 'react';
 
-export default function ReviewCard({ review, onEdit, onDelete }) {
+function toDate(v) {
+  if (!v) return null;
+  return typeof v.toDate === 'function' ? v.toDate() : new Date(v);
+}
+
+export default function ReviewCard({ review, onEdit, onDelete, selected = false, onToggle }) {
   const [snsDialogOpen, setSnsDialogOpen] = useState(false);
   const displayTitle = review.titleJa || review.titleEn || review.title || '';
   const displayText = review.bodyJa || review.bodyEn || review.body || review.cleanedTextJa || '';
 
+  const updatedAt = toDate(review.updatedAt);
+  const exportedEn = toDate(review.exportedToJudgeMeEn);
+  const exportedJa = toDate(review.exportedToJudgeMeJa);
+  const enStale = exportedEn && updatedAt && updatedAt > exportedEn;
+  const jaStale = exportedJa && updatedAt && updatedAt > exportedJa;
+
   return (
-    <Card variant="outlined" sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <Card
+      variant="outlined"
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        borderColor: selected ? 'primary.main' : 'divider',
+        borderWidth: selected ? 2 : 1,
+      }}
+    >
       {review.postcardImageUrl && (
         <CardMedia
           component="img"
@@ -39,9 +61,15 @@ export default function ReviewCard({ review, onEdit, onDelete }) {
       )}
 
       <CardContent sx={{ flexGrow: 1 }}>
-        {/* Header row: name + status */}
+        {/* Header row: checkbox + name + status */}
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
-          <Box minWidth={0}>
+          <Checkbox
+            checked={selected}
+            onChange={() => onToggle?.(review.id)}
+            size="small"
+            sx={{ mt: -0.5, ml: -1, flexShrink: 0 }}
+          />
+          <Box minWidth={0} flex={1}>
             <Stack direction="row" alignItems="center" spacing={0.5}>
               <Typography variant="subtitle1" fontWeight={600} noWrap>
                 {review.reviewerName || '(No name)'}
@@ -105,6 +133,28 @@ export default function ReviewCard({ review, onEdit, onDelete }) {
           )}
           {review.source && (
             <Chip label={review.source} size="small" color="default" />
+          )}
+          {exportedEn && (
+            <Tooltip title={`EN exported ${formatDate(review.exportedToJudgeMeEn)}${enStale ? ' — edited after export' : ''}`}>
+              <Chip
+                icon={<FileDownloadOutlined />}
+                label="EN"
+                size="small"
+                color={enStale ? 'warning' : 'success'}
+                variant="outlined"
+              />
+            </Tooltip>
+          )}
+          {exportedJa && (
+            <Tooltip title={`JA exported ${formatDate(review.exportedToJudgeMeJa)}${jaStale ? ' — edited after export' : ''}`}>
+              <Chip
+                icon={<FileDownloadOutlined />}
+                label="JA"
+                size="small"
+                color={jaStale ? 'warning' : 'success'}
+                variant="outlined"
+              />
+            </Tooltip>
           )}
           <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
             {formatDate(review.createdAt)}
