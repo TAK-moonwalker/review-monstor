@@ -256,7 +256,7 @@ export default function SnsCardGeneratorDialog({ open, onClose, review }) {
       <div style={{ position: 'absolute', bottom: 38, left: 36, right: 36 }}>
         {showRating && rating > 0 && (
           <div style={{ marginBottom: 14 }}>
-            {renderStars(GOLD, 'rgba(255,255,255,0.20)')}
+            {renderStars('#ffffff', 'rgba(255,255,255,0.20)')}
           </div>
         )}
         <div style={{

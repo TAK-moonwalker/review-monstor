@@ -5,14 +5,18 @@ import {
   CircularProgress,
   Divider,
   FormControlLabel,
+  IconButton,
+  InputAdornment,
   MenuItem,
   Rating,
   Stack,
   Switch,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined';
+import OpenInNewOutlined from '@mui/icons-material/OpenInNewOutlined';
 import { uploadReviewImage } from '../firebase/storageService';
 
 const SectionHeader = ({ title }) => (
@@ -262,6 +266,25 @@ export default function ReviewFormFields({ form, setForm }) {
         onChange={f('postcardImageUrl')}
         fullWidth
         helperText="Or paste a Shopify / WordPress hosted URL directly"
+        slotProps={{
+          input: {
+            endAdornment: form.postcardImageUrl ? (
+              <InputAdornment position="end">
+                <Tooltip title="Open in new tab">
+                  <IconButton
+                    size="small"
+                    component="a"
+                    href={form.postcardImageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <OpenInNewOutlined fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </InputAdornment>
+            ) : null,
+          },
+        }}
       />
 
       <TextField
@@ -283,6 +306,23 @@ export default function ReviewFormFields({ form, setForm }) {
         fullWidth
         helperText="Comma-separated URLs"
       />
+      {Array.isArray(form.pictureUrls) && form.pictureUrls.length > 0 && (
+        <Stack direction="row" spacing={0.5} flexWrap="wrap">
+          {form.pictureUrls.map((url, i) => (
+            <Tooltip key={i} title={url}>
+              <IconButton
+                size="small"
+                component="a"
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <OpenInNewOutlined fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          ))}
+        </Stack>
+      )}
 
       {/* ── 5. Permission / Export ────────────────────────────────── */}
       <SectionHeader title="5. Permission / Export" />
