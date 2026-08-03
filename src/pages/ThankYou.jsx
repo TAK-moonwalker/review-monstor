@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Box,
   Button,
@@ -10,10 +10,39 @@ import {
   Snackbar,
   Tooltip,
   Typography,
-} from '@mui/material';
-import CheckCircleOutlined from '@mui/icons-material/CheckCircleOutlined';
-import ContentCopyOutlined from '@mui/icons-material/ContentCopyOutlined';
-import { useSettings } from '../hooks/useSettings';
+} from "@mui/material";
+import CheckCircleOutlined from "@mui/icons-material/CheckCircleOutlined";
+import ContentCopyOutlined from "@mui/icons-material/ContentCopyOutlined";
+import { useSettings } from "../hooks/useSettings";
+
+const SHOP_URL = "https://shopify.sulci.co.jp/";
+
+const detectDefaultLanguage = () => {
+  if (typeof navigator === "undefined") return "en";
+  const locale = String(
+    navigator.language || navigator.userLanguage || "",
+  ).toLowerCase();
+  return locale.startsWith("ja") ? "ja" : "en";
+};
+
+const UI_COPY = {
+  en: {
+    title: "Thank You!",
+    defaultThanks: "Your review has been submitted successfully.",
+    couponMessage: "Please use this coupon for your next shopping!",
+    copyCode: "Copy code",
+    backToShop: "Back to Shop",
+    copied: "Coupon code copied!",
+  },
+  ja: {
+    title: "ありがとうございました！",
+    defaultThanks: "レビューの送信が完了しました。",
+    couponMessage: "次回のお買い物でこちらのクーポンをご利用ください！",
+    copyCode: "コードをコピー",
+    backToShop: "ショップに戻る",
+    copied: "クーポンコードをコピーしました！",
+  },
+};
 
 export default function ThankYou() {
   const location = useLocation();
@@ -22,6 +51,8 @@ export default function ThankYou() {
 
   // Prefer values passed via router state, fall back to live settings
   const state = location.state || {};
+  const language = state.language === "ja" ? "ja" : detectDefaultLanguage();
+  const t = UI_COPY[language];
   const couponEnabled = state.couponEnabled ?? settings.couponEnabled;
   const couponCode = state.couponCode ?? settings.couponCode;
   const thankYouMessage = state.thankYouMessage ?? settings.thankYouMessage;
@@ -33,28 +64,30 @@ export default function ThankYou() {
 
   return (
     <Container maxWidth="xs">
-      <Box sx={{ mt: 8, mb: 6, textAlign: 'center' }}>
-        <CheckCircleOutlined sx={{ fontSize: 72, color: 'success.main', mb: 2 }} />
+      <Box sx={{ mt: 8, mb: 6, textAlign: "center" }}>
+        <CheckCircleOutlined
+          sx={{ fontSize: 72, color: "success.main", mb: 2 }}
+        />
 
         <Typography variant="h4" fontWeight={700} gutterBottom>
-          Thank You!
+          {t.title}
         </Typography>
 
         <Typography color="text.secondary" sx={{ mb: 3 }}>
-          {thankYouMessage || 'Your review has been submitted successfully.'}
+          {thankYouMessage || t.defaultThanks}
         </Typography>
 
         {!loading && couponEnabled && couponCode && (
           <Card variant="outlined" sx={{ mt: 2, mb: 3 }}>
             <CardContent>
               <Typography variant="body2" color="text.secondary" gutterBottom>
-                Here is your exclusive coupon code:
+                {t.couponMessage}
               </Typography>
               <Box
                 sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                   gap: 1,
                   mt: 1,
                 }}
@@ -67,11 +100,26 @@ export default function ThankYou() {
                 >
                   {couponCode}
                 </Typography>
-                <Tooltip title="Copy code">
+                <Tooltip title={t.copyCode}>
                   <IconButton size="small" onClick={handleCopy}>
                     <ContentCopyOutlined fontSize="small" />
                   </IconButton>
                 </Tooltip>
+              </Box>
+              <Box sx={{ mt: 2, textAlign: "center" }}>
+                <Typography variant="body2" color="text.secondary">
+                  Our online shop ↓
+                </Typography>
+                <Button
+                  component="a"
+                  href={SHOP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  size="small"
+                  sx={{ mt: 0.5 }}
+                >
+                  {SHOP_URL}
+                </Button>
               </Box>
             </CardContent>
           </Card>
@@ -85,7 +133,7 @@ export default function ThankYou() {
             sx={{ mt: 1 }}
             fullWidth
           >
-            Back to Shop
+            {t.backToShop}
           </Button>
         )}
       </Box>
@@ -94,7 +142,7 @@ export default function ThankYou() {
         open={copied}
         autoHideDuration={2500}
         onClose={() => setCopied(false)}
-        message="Coupon code copied!"
+        message={t.copied}
       />
     </Container>
   );

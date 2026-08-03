@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  Alert,
   Box,
   Button,
   Grid,
+  Snackbar,
   MenuItem,
   Stack,
   TextField,
@@ -23,7 +25,7 @@ import { exportToJudgeMe } from '../utils/exportJudgeMe';
 const SOURCES = ['all', 'manual', 'token', 'import', 'google', 'other'];
 
 export default function Reviews() {
-  const { reviews, loading } = useReviews();
+  const { reviews, loading, error } = useReviews();
   const { settings } = useSettings();
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState('all');
@@ -31,6 +33,9 @@ export default function Reviews() {
   const [productSearch, setProductSearch] = useState('');
   const [keyword, setKeyword] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteSuccessOpen, setDeleteSuccessOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [exportLang, setExportLang] = useState(settings.judgeMeLanguage || 'en');
 
@@ -62,9 +67,23 @@ export default function Reviews() {
   });
 
   const handleDelete = async () => {
-    if (deleteTarget) {
+    if (!deleteTarget || deleteLoading) return;
+    setDeleteLoading(true);
+    setDeleteError('');
+    try {
       await deleteReview(deleteTarget.id);
       setDeleteTarget(null);
+      setDeleteSuccessOpen(true);
+      setSelectedIds((prev) => {
+        if (!prev.has(deleteTarget.id)) return prev;
+        const next = new Set(prev);
+        next.delete(deleteTarget.id);
+        return next;
+      });
+    } catch (err) {
+      setDeleteError(String(err?.message || err || 'Failed to delete review.'));
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -72,6 +91,18 @@ export default function Reviews() {
 
   return (
     <Box>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Failed to load reviews: {String(error.message || error)}
+        </Alert>
+      )}
+
+      {deleteError && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setDeleteError('')}>
+          Delete failed: {deleteError}
+        </Alert>
+      )}
+
       {/* Page header */}
       <Stack
         direction="row"
@@ -198,10 +229,25 @@ export default function Reviews() {
       <ConfirmDialog
         open={!!deleteTarget}
         title="Delete Review"
-        message={`Delete review by ${deleteTarget?.reviewerName || 'this reviewer'}? This cannot be undone.`}
+        message={deleteLoading
+          ? 'Deleting review...'
+          : `Delete review by ${deleteTarget?.reviewerName || 'this reviewer'}? This cannot be undone.`}
+        loading={deleteLoading}
+        confirmText="Delete"
         onConfirm={handleDelete}
-        onCancel={() => setDeleteTarget(null)}
+        onCancel={deleteLoading ? undefined : () => setDeleteTarget(null)}
       />
+
+      <Snackbar
+        open={deleteSuccessOpen}
+        autoHideDuration={2400}
+        onClose={() => setDeleteSuccessOpen(false)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setDeleteSuccessOpen(false)} severity="success" variant="filled" sx={{ width: '100%' }}>
+          Review deleted successfully.
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

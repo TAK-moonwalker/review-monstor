@@ -8,6 +8,7 @@ import {
   updateDoc,
   query,
   where,
+  limit,
   orderBy,
   serverTimestamp,
   onSnapshot,
@@ -19,11 +20,14 @@ export const createReviewRequest = (uid, data) =>
   addDoc(collection(db, COL), {
     uid,
     token: data.token ?? '',
+    language: data.language ?? 'en',
     customerName: data.customerName ?? '',
     customerEmail: data.customerEmail ?? '',
     orderNumber: data.orderNumber ?? '',
     productHandle: data.productHandle ?? '',
     productTitle: data.productTitle ?? '',
+    crocheterName: data.crocheterName ?? '',
+    couponCode: data.couponCode ?? '',
     used: false,
     expiresAt: data.expiresAt ?? null,
     submittedReviewId: null,
@@ -32,7 +36,7 @@ export const createReviewRequest = (uid, data) =>
   });
 
 export const getReviewRequestByToken = async (token) => {
-  const q = query(collection(db, COL), where('token', '==', token));
+  const q = query(collection(db, COL), where('token', '==', token), limit(1));
   const snap = await getDocs(q);
   if (snap.empty) return null;
   const d = snap.docs[0];

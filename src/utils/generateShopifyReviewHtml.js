@@ -1,6 +1,8 @@
 const DEFAULT_OPTIONS = {
   cardCount: 6,
   apiEndpoint: 'https://us-central1-review-monster-80750.cloudfunctions.net/publicReviews',
+  ownerUid: '',
+  fullWidth: false,
   useProductHandle: false,
   imageWidth: 1080,
   imageHeight: 1080,
@@ -42,10 +44,13 @@ export function generateShopifyReviewHtml(_reviews, options) {
   const brandLabel = escapeHtml(opts.brandLabel || 'Review Monster');
   const layout = opts.layout === 'horizontal' ? 'horizontal' : 'grid';
   const theme = ['minimal', 'warm', 'editorial'].includes(opts.theme) ? opts.theme : 'minimal';
+  const fullWidth = !!opts.fullWidth;
 
   const runtimeOptions = {
     cardCount: Math.max(1, Number(opts.cardCount) || 6),
     apiEndpoint: String(opts.apiEndpoint || '').trim(),
+    ownerUid: String(opts.ownerUid || '').trim(),
+    fullWidth,
     useProductHandle: !!opts.useProductHandle,
     imageWidth: Math.max(1, Number(opts.imageWidth) || 1080),
     imageHeight: Math.max(1, Number(opts.imageHeight) || 1080),
@@ -58,7 +63,7 @@ export function generateShopifyReviewHtml(_reviews, options) {
     showProductTitle: !!opts.showProductTitle,
   };
 
-  return `<section class="myshop-review-section" data-layout="${layout}" data-theme="${theme}">
+  return `<section class="myshop-review-section" data-layout="${layout}" data-theme="${theme}" data-full-width="${fullWidth ? 'true' : 'false'}">
   <div class="myshop-review-header">
     <p class="myshop-review-brand">${brandLabel}</p>
     <h2 class="myshop-review-title">${sectionTitle}</h2>
@@ -96,6 +101,13 @@ export function generateShopifyReviewHtml(_reviews, options) {
     color: var(--myshop-text);
     box-sizing: border-box;
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+
+  .myshop-review-section[data-full-width="true"] {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 24px clamp(16px, 4vw, 40px) 32px;
   }
 
   .myshop-review-section[data-theme="warm"] {
@@ -388,7 +400,9 @@ export function generateShopifyReviewHtml(_reviews, options) {
 
   function toApiUrl(options) {
     var endpoint = toStringSafe(options.apiEndpoint);
+    var ownerUid = toStringSafe(options.ownerUid);
     if (!endpoint) return '';
+    if (!ownerUid) return '';
 
     var count = Math.max(1, Number(options.cardCount) || 6);
     var poolLimit = Math.max(count, Math.min(60, count * 4));
@@ -399,6 +413,7 @@ export function generateShopifyReviewHtml(_reviews, options) {
       var url = new URL(endpoint, window.location.href);
       url.searchParams.set('limit', String(count));
       url.searchParams.set('poolLimit', String(poolLimit));
+      url.searchParams.set('uid', ownerUid);
       if (productHandle) {
         url.searchParams.set('productHandle', productHandle);
       }

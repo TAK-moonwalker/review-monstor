@@ -67,7 +67,13 @@ export const subscribeReviews = (uid, callback, onError) => {
   const q = query(collection(db, COL), where('uid', '==', uid), orderBy('createdAt', 'desc'));
   return onSnapshot(
     q,
-    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    { includeMetadataChanges: true },
+    (snap) => {
+      if (snap.metadata.hasPendingWrites) {
+        return;
+      }
+      callback(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    },
     onError,
   );
 };

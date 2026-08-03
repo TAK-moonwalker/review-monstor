@@ -1,19 +1,20 @@
-const {setGlobalOptions} = require("firebase-functions");
-const {onCall, onRequest, HttpsError} = require("firebase-functions/v2/https");
-const {initializeApp} = require("firebase-admin/app");
-const {getFirestore, FieldValue} = require("firebase-admin/firestore");
+const { setGlobalOptions } = require("firebase-functions");
+const { onCall, onRequest, HttpsError } =
+  require("firebase-functions/v2/https");
+const { initializeApp } = require("firebase-admin/app");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 
 const projectId =
   process.env.GCLOUD_PROJECT ||
   process.env.GCP_PROJECT ||
   "review-monster-80750";
 
-initializeApp({projectId});
-setGlobalOptions({maxInstances: 10, region: "us-central1"});
+initializeApp({ projectId });
+setGlobalOptions({ maxInstances: 10, region: "us-central1" });
 
 let db;
 
-const MAX_LIMIT = 30;
+const MAX_LIMIT = 100;
 const ALLOWED_PUBLIC_ORIGINS = new Set([
   "http://localhost:5173",
   "https://review-monster-80750.web.app",
@@ -96,7 +97,7 @@ function applyPublicCors(req, res) {
   }
 
   if (!isAllowedOrigin) {
-    res.status(403).json({error: "Origin not allowed"});
+    res.status(403).json({ error: "Origin not allowed" });
     return true;
   }
 
@@ -140,27 +141,36 @@ exports.submitReviewByToken = onCall(async (request) => {
     title,
     body,
     permissionGranted,
+    language,
   } = request.data;
+  const normalizedLanguage = String(language || "")
+    .toLowerCase()
+    .startsWith("ja") ? "ja" : "en";
+  const reviewBody = String(body || "").trim();
+  const reviewRating = Number(rating) || 5;
 
   // Input validation
   if (!token || typeof token !== "string") {
     throw new HttpsError("invalid-argument", "token is required");
   }
-  if (!body || typeof body !== "string" || body.trim().length === 0) {
+  if (!reviewerName || typeof reviewerName !== "string" ||
+    reviewerName.trim().length === 0) {
+    throw new HttpsError("invalid-argument", "Display name is required");
+  }
+  if (!reviewBody) {
     throw new HttpsError("invalid-argument", "Review body is required");
   }
-  if (!rating || typeof rating !== "number" ||
-      rating < 1 || rating > 5) {
+  if (reviewRating < 1 || reviewRating > 5) {
     throw new HttpsError(
-        "invalid-argument", "Rating must be between 1 and 5");
+      "invalid-argument", "Rating must be between 1 and 5");
   }
 
   // Look up the review request by token
   const reqSnap = await db
-      .collection("reviewRequests")
-      .where("token", "==", token)
-      .limit(1)
-      .get();
+    .collection("reviewRequests")
+    .where("token", "==", token)
+    .limit(1)
+    .get();
 
   if (reqSnap.empty) {
     throw new HttpsError("not-found", "Invalid review link");
@@ -171,8 +181,8 @@ exports.submitReviewByToken = onCall(async (request) => {
 
   if (reqData.used === true) {
     throw new HttpsError(
-        "failed-precondition",
-        "This review link has already been used");
+      "failed-precondition",
+      "This review link has already been used");
   }
 
   if (reqData.expiresAt) {
@@ -181,8 +191,8 @@ exports.submitReviewByToken = onCall(async (request) => {
       new Date(reqData.expiresAt);
     if (expires < new Date()) {
       throw new HttpsError(
-          "failed-precondition",
-          "This review link has expired");
+        "failed-precondition",
+        "This review link has expired");
     }
   }
 
@@ -192,6 +202,10 @@ exports.submitReviewByToken = onCall(async (request) => {
     null;
   const settings = (settingsSnap && settingsSnap.exists) ?
     settingsSnap.data() : {};
+  const requestCouponCode = String(reqData.couponCode || "").trim();
+  const settingsCouponCode = settings.couponEnabled ?
+    String(settings.couponCode || "").trim() : "";
+  const resolvedCouponCode = requestCouponCode || settingsCouponCode;
 
   // Atomic write: create review + mark request used
   const reviewRef = db.collection("reviews").doc();
@@ -201,20 +215,25 @@ exports.submitReviewByToken = onCall(async (request) => {
     const freshReq = await tx.get(reqDoc.ref);
     if (!freshReq.exists || freshReq.data().used === true) {
       throw new HttpsError(
-          "failed-precondition",
-          "This review link has already been used");
+        "failed-precondition",
+        "This review link has already been used");
     }
 
     tx.set(reviewRef, {
       uid: reqData.uid || null,
-      reviewerName: reviewerName || "",
+      reviewerName: reviewerName.trim(),
       reviewerEmail: reviewerEmail || "",
-      rating,
+      rating: reviewRating,
       title: title || "",
-      body: body.trim(),
+      body: reviewBody,
+      bodyJa: normalizedLanguage === "ja" ? reviewBody : "",
+      bodyEn: normalizedLanguage === "en" ? reviewBody : "",
+      reviewLanguage: normalizedLanguage,
+      reviewDate: FieldValue.serverTimestamp(),
       permissionGranted: permissionGranted === true,
       productHandle: reqData.productHandle || "",
       productTitle: reqData.productTitle || "",
+      crocheterName: reqData.crocheterName || "",
       source: "qr_form",
       status: settings.defaultReviewStatus || "draft",
       verified: false,
@@ -233,9 +252,8 @@ exports.submitReviewByToken = onCall(async (request) => {
   return {
     success: true,
     reviewId: reviewRef.id,
-    couponEnabled: settings.couponEnabled === true,
-    couponCode: settings.couponEnabled ?
-      (settings.couponCode || "") : "",
+    couponEnabled: !!resolvedCouponCode,
+    couponCode: resolvedCouponCode,
     thankYouMessage: settings.thankYouMessage || "",
   };
 });
@@ -247,29 +265,37 @@ exports.submitReviewByToken = onCall(async (request) => {
  * Returns a small, random subset of approved reviews.
  *
  * Query params:
+ *   uid: required owner uid
  *   productHandle: optional string
- *   limit: optional integer (1..30, default 6)
+ *   limit: optional integer (1..100, default 6)
  */
 exports.publicReviews = onRequest(async (req, res) => {
   if (applyPublicCors(req, res)) return;
 
   if (req.method !== "GET") {
-    res.status(405).json({error: "Method not allowed"});
+    res.status(405).json({ error: "Method not allowed" });
     return;
   }
 
   try {
     const db = getDb();
+    const uid = String(req.query.uid || "").trim();
     const productHandle = String(req.query.productHandle || "").trim();
     const normalizedHandle = productHandle.toLowerCase();
     const limit = parseIntParam(req.query.limit, 6, 1, MAX_LIMIT);
     const poolLimit = parseIntParam(req.query.poolLimit, 30, limit, 100);
 
+    if (!uid) {
+      res.status(400).json({ error: "uid is required" });
+      return;
+    }
+
     const fetchLimit = Math.max(60, Math.min(200, poolLimit * 4));
     const snap = await db.collection("reviews")
-        .orderBy("updatedAt", "desc")
-        .limit(fetchLimit)
-        .get();
+      .where("uid", "==", uid)
+      .orderBy("createdAt", "desc")
+      .limit(fetchLimit)
+      .get();
 
     const allEligibleItems = snap.docs.map((doc) => {
       const data = doc.data();
@@ -296,8 +322,8 @@ exports.publicReviews = onRequest(async (req, res) => {
         status: String(data.status || "").trim().toLowerCase(),
         productHandle: String(data.productHandle || "").trim(),
         normalizedProductHandle: String(data.productHandle || "")
-            .trim()
-            .toLowerCase(),
+          .trim()
+          .toLowerCase(),
       };
     }).filter((item) => {
       if (!item.permissionGranted) return false;
@@ -316,7 +342,7 @@ exports.publicReviews = onRequest(async (req, res) => {
 
     const productMatchedItems = normalizedHandle ?
       allEligibleItems.filter(
-          (item) => item.normalizedProductHandle === normalizedHandle,
+        (item) => item.normalizedProductHandle === normalizedHandle,
       ) :
       [];
     const sourceItems = productMatchedItems.length > 0 ?
@@ -328,13 +354,14 @@ exports.publicReviews = onRequest(async (req, res) => {
     res.set("Cache-Control", "public, max-age=300, s-maxage=300");
     res.status(200).json({
       count: selected.length,
+      uid,
       productHandle,
       matchedProductCount: productMatchedItems.length,
       reviews: selected,
     });
   } catch (error) {
     console.error("publicReviews failed", error);
-    res.status(500).json({error: "Failed to load public reviews"});
+    res.status(500).json({ error: "Failed to load public reviews" });
   }
 });
 

@@ -17,6 +17,7 @@ import ContentCopyOutlined from '@mui/icons-material/ContentCopyOutlined';
 import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
 import OpenInNewOutlined from '@mui/icons-material/OpenInNewOutlined';
 import { useReviews } from '../hooks/useReviews';
+import { useAuth } from '../hooks/useAuth';
 import LoadingScreen from '../components/LoadingScreen';
 import { generateShopifyReviewHtml } from '../utils/generateShopifyReviewHtml';
 
@@ -47,6 +48,7 @@ const THEME_OPTIONS = [
 const INITIAL_OPTIONS = {
   cardCount: 6,
   apiEndpoint: 'https://us-central1-review-monster-80750.cloudfunctions.net/publicReviews',
+  fullWidth: false,
   textSource: 'shortQuoteEn',
   imageSource: 'postcardImageUrl',
   sectionTitle: 'Customer Reviews',
@@ -78,12 +80,18 @@ function countEligibleReviews(reviews, options) {
 }
 
 export default function HtmlCodeGenerator() {
+  const { user } = useAuth();
   const { reviews, loading, error } = useReviews();
   const [options, setOptions] = useState(INITIAL_OPTIONS);
   const [copyMessage, setCopyMessage] = useState('');
 
-  const eligibleCount = useMemo(() => countEligibleReviews(reviews, options), [reviews, options]);
-  const generatedCode = useMemo(() => generateShopifyReviewHtml(reviews, options), [reviews, options]);
+  const optionsWithOwner = useMemo(
+    () => ({ ...options, ownerUid: typeof user?.uid === 'string' ? user.uid : '' }),
+    [options, user?.uid],
+  );
+
+  const eligibleCount = useMemo(() => countEligibleReviews(reviews, optionsWithOwner), [reviews, optionsWithOwner]);
+  const generatedCode = useMemo(() => generateShopifyReviewHtml(reviews, optionsWithOwner), [reviews, optionsWithOwner]);
 
   if (loading) return <LoadingScreen />;
 
@@ -183,7 +191,7 @@ export default function HtmlCodeGenerator() {
                   onChange={handleChange('apiEndpoint')}
                   size="small"
                   fullWidth
-                  helperText="Shopify snippet calls this endpoint at runtime."
+                  helperText="Shopify snippet calls this endpoint at runtime with your owner uid."
                 />
 
                 <TextField
@@ -265,6 +273,10 @@ export default function HtmlCodeGenerator() {
                 <FormControlLabel
                   control={<Checkbox checked={options.showProductTitle} onChange={handleCheck('showProductTitle')} />}
                   label="Show product title"
+                />
+                <FormControlLabel
+                  control={<Checkbox checked={options.fullWidth} onChange={handleCheck('fullWidth')} />}
+                  label="Full width"
                 />
                 <FormControlLabel
                   control={<Checkbox checked={options.onlyPermissionGranted} onChange={handleCheck('onlyPermissionGranted')} />}
