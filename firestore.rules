@@ -50,7 +50,7 @@ service cloud.firestore {
       // Validates minimum required fields and blocks status manipulation.
       allow create: if
         request.auth == null &&
-        request.resource.data.keys().hasAll(['reviewerName', 'body', 'rating', 'source']) &&
+        request.resource.data.keys().hasAll(['reviewerName', 'body', 'rating', 'source', 'crocheterName']) &&
         request.resource.data.status == 'draft' &&
         request.resource.data.source == 'qr_form' &&
         request.resource.data.rating is int &&
@@ -73,13 +73,8 @@ service cloud.firestore {
       // Public: get by document ID (kept for potential direct-ID lookups)
       allow get: if true;
 
-      // Public: mark request as used after submitting review
-      // Only allows setting used=true and submittedReviewId; nothing else.
-      allow update: if
-        request.auth == null &&
-        request.resource.data.used == true &&
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['used', 'submittedReviewId', 'updatedAt']);
+      // Public update rule removed: all writes now go through the Cloud Function
+      // via Admin SDK which bypasses rules entirely.
     }
 
     // ── settings ──────────────────────────────────────────────────────────────
@@ -89,6 +84,12 @@ service cloud.firestore {
 
       // Public: read-only (needed for reviewFormTitle, coupon etc. on public pages)
       allow read: if true;
+    }
+
+    // ── reviewSubmissionLogs ──────────────────────────────────────────────────
+    match /reviewSubmissionLogs/{id} {
+      // Admin SDK only via Cloud Function; no client access.
+      allow read, write: if false;
     }
 
   }

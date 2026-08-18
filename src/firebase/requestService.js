@@ -14,6 +14,7 @@ import {
   onSnapshot,
 } from 'firebase/firestore';
 
+
 const COL = 'reviewRequests';
 
 export const createReviewRequest = (uid, data) =>
@@ -29,11 +30,30 @@ export const createReviewRequest = (uid, data) =>
     crocheterName: data.crocheterName ?? '',
     couponCode: data.couponCode ?? '',
     used: false,
-    expiresAt: data.expiresAt ?? null,
+    active: data.active ?? true,
     submittedReviewId: null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+export const getReviewRequestsByHandle = async (uid, productHandle) => {
+  const q = query(
+    collection(db, COL),
+    where('uid', '==', uid),
+    where('productHandle', '==', productHandle),
+    limit(2),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+};
+
+export const getReviewRequestByHandleAndLanguage = async (uid, productHandle, language) => {
+  const all = await getReviewRequestsByHandle(uid, productHandle);
+  return all.find((r) => r.language === language) ?? null;
+};
+
+export const setReviewRequestActive = (id, active) =>
+  updateDoc(doc(db, COL, id), { active, updatedAt: serverTimestamp() });
 
 export const getReviewRequestByToken = async (token) => {
   const q = query(collection(db, COL), where('token', '==', token), limit(1));
@@ -60,6 +80,9 @@ export const subscribeReviewRequests = (uid, callback, onError) => {
 };
 
 export const deleteReviewRequest = (id) => deleteDoc(doc(db, COL, id));
+
+export const updateReviewRequest = (id, data) =>
+  updateDoc(doc(db, COL, id), { ...data, updatedAt: serverTimestamp() });
 
 // Legacy aliases
 export const createRequest = createReviewRequest;

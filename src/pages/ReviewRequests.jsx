@@ -4,7 +4,6 @@ import {
   Button,
   Card,
   CardContent,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -13,6 +12,7 @@ import {
   IconButton,
   MenuItem,
   Stack,
+  Switch,
   TextField,
   Tooltip,
   Typography,
@@ -20,6 +20,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import ContentCopyOutlined from "@mui/icons-material/ContentCopyOutlined";
 import DeleteOutlined from "@mui/icons-material/DeleteOutlined";
+import EditOutlined from "@mui/icons-material/EditOutlined";
 import QrCode2Outlined from "@mui/icons-material/QrCode2Outlined";
 import { QRCodeSVG } from "qrcode.react";
 import { toJpeg } from "html-to-image";
@@ -27,6 +28,10 @@ import { useReviewRequests } from "../hooks/useReviewRequests";
 import {
   createReviewRequest,
   deleteReviewRequest,
+  getReviewRequestsByHandle,
+  getReviewRequestByHandleAndLanguage,
+  setReviewRequestActive,
+  updateReviewRequest,
 } from "../firebase/requestService";
 import { generateToken } from "../utils/generateToken";
 import { useAuth } from "../hooks/useAuth";
@@ -36,30 +41,14 @@ import EmptyState from "../components/EmptyState";
 import { formatDate } from "../utils/dateUtils";
 
 const BASE_URL = `${window.location.origin}/review`;
-const QR_EXPORT_WIDTH_PX = 567;
-const QR_EXPORT_HEIGHT_PX = 709;
-
-const toDateInputValue = (date) => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-};
-
-const getDefaultExpiresAt = () => {
-  const next = new Date();
-  next.setMonth(next.getMonth() + 3);
-  return toDateInputValue(next);
-};
+const QR_EXPORT_WIDTH_PX = 591; // 50 mm @ 300 dpi
+const QR_EXPORT_HEIGHT_PX = 591;
 
 const getInitialForm = () => ({
   language: "en",
-  orderNumber: "",
   productHandle: "",
   productTitle: "",
-  crocheterName: "",
   couponCode: "",
-  expiresAt: getDefaultExpiresAt(),
 });
 
 const QR_COPY = {
@@ -68,11 +57,6 @@ const QR_COPY = {
     language: "Language",
     languageEn: "English",
     languageJa: "Japanese",
-    itemName: "Item name",
-    crocheterName: "Crocheter's name",
-    askMessage:
-      "Please write a message to our crocheter {name} who made this bag.",
-    couponMessage: "We give coupon if you write review for us.",
     copyLink: "Copy Link",
     downloadJpeg: "Download JPEG",
     close: "Close",
@@ -82,10 +66,6 @@ const QR_COPY = {
     language: "言語",
     languageEn: "英語",
     languageJa: "日本語",
-    itemName: "商品名",
-    crocheterName: "編み手の名前",
-    askMessage: "このバッグを作った {name} へのメッセージをご記入ください。",
-    couponMessage: "レビュー投稿でクーポンをプレゼント！",
     copyLink: "リンクをコピー",
     downloadJpeg: "JPEGを保存",
     close: "閉じる",
@@ -101,6 +81,8 @@ export default function ReviewRequests() {
   const [qrTarget, setQrTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [downloading, setDownloading] = useState(false);
+  const [editTarget, setEditTarget] = useState(null);
+  const [editForm, setEditForm] = useState(null);
   const qrCardRef = useRef(null);
 
   if (loading) return <LoadingScreen />;
@@ -109,18 +91,63 @@ export default function ReviewRequests() {
 
   const handleCreate = async () => {
     setSaving(true);
-    const token = generateToken();
-    const expiresAt = form.expiresAt ? new Date(form.expiresAt) : null;
-    await createReviewRequest(user.uid, { ...form, token, expiresAt });
-    setForm(getInitialForm());
-    setSaving(false);
-    setDialogOpen(false);
+    try {
+      if (form.productHandle.trim()) {
+        const existing = await getReviewRequestByHandleAndLanguage(
+          user.uid,
+          form.productHandle.trim(),
+          form.language,
+        );
+        if (existing) {
+          setForm(getInitialForm());
+          setDialogOpen(false);
+          setQrTarget(existing);
+          return;
+        }
+      }
+      const token = generateToken();
+      await createReviewRequest(user.uid, { ...form, token });
+      setForm(getInitialForm());
+      setDialogOpen(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async () => {
     if (deleteTarget) {
       await deleteReviewRequest(deleteTarget.id);
       setDeleteTarget(null);
+    }
+  };
+
+  const handleEditSave = async () => {
+    if (!editTarget || !editForm) return;
+    setSaving(true);
+    try {
+      if (editForm.productHandle.trim()) {
+        const siblings = await getReviewRequestsByHandle(
+          user.uid,
+          editForm.productHandle.trim(),
+        );
+        const conflict = siblings.find(
+          (r) => r.id !== editTarget.id && r.language === editForm.language,
+        );
+        if (conflict) {
+          setEditTarget(null);
+          setQrTarget(conflict);
+          return;
+        }
+      }
+      await updateReviewRequest(editTarget.id, {
+        language: editForm.language,
+        productHandle: editForm.productHandle,
+        productTitle: editForm.productTitle,
+        couponCode: editForm.couponCode,
+      });
+      setEditTarget(null);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -132,9 +159,9 @@ export default function ReviewRequests() {
 
   const printTitle =
     qrTarget?.productTitle || qrTarget?.productHandle || "Item";
-  const printCrocheterName = qrTarget?.crocheterName || "[]";
   const qrLanguage = qrTarget?.language === "ja" ? "ja" : "en";
   const q = QR_COPY[qrLanguage];
+  const qrLanguageCode = qrLanguage === "ja" ? "JP" : "EN";
 
   const handleDownloadJpeg = async () => {
     if (!qrCardRef.current || !qrTarget) return;
@@ -155,7 +182,7 @@ export default function ReviewRequests() {
 
       const link = document.createElement("a");
       link.href = dataUrl;
-      link.download = `qr-label-${slug || "item"}-48x60mm.jpg`;
+      link.download = `qr-label-${slug || "item"}-50x50mm.jpg`;
       link.click();
     } finally {
       setDownloading(false);
@@ -207,11 +234,22 @@ export default function ReviewRequests() {
                         </Typography>
                       )}
                     </Box>
-                    <Chip
-                      label={req.used ? "Used" : "Pending"}
-                      color={req.used ? "default" : "success"}
-                      size="small"
-                    />
+                    <Tooltip
+                      title={
+                        (req.active ?? true)
+                          ? "Active — click to deactivate"
+                          : "Inactive — click to activate"
+                      }
+                    >
+                      <Switch
+                        size="small"
+                        checked={req.active ?? true}
+                        onChange={() =>
+                          setReviewRequestActive(req.id, !(req.active ?? true))
+                        }
+                        color="success"
+                      />
+                    </Tooltip>
                   </Stack>
 
                   {(req.productTitle || req.productHandle) && (
@@ -267,8 +305,6 @@ export default function ReviewRequests() {
                     sx={{ display: "block", mt: 0.5 }}
                   >
                     Created: {formatDate(req.createdAt)}
-                    {req.expiresAt &&
-                      ` · Expires: ${formatDate(req.expiresAt)}`}
                   </Typography>
 
                   <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
@@ -283,6 +319,22 @@ export default function ReviewRequests() {
                     <Tooltip title="Show QR code">
                       <IconButton size="small" onClick={() => setQrTarget(req)}>
                         <QrCode2Outlined fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Edit request">
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          setEditTarget(req);
+                          setEditForm({
+                            language: req.language ?? "en",
+                            productHandle: req.productHandle ?? "",
+                            productTitle: req.productTitle ?? "",
+                            couponCode: req.couponCode ?? "",
+                          });
+                        }}
+                      >
+                        <EditOutlined fontSize="small" />
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Delete request">
@@ -323,16 +375,11 @@ export default function ReviewRequests() {
               <MenuItem value="ja">{fq.languageJa}</MenuItem>
             </TextField>
             <TextField
-              label="Order Number"
-              value={form.orderNumber}
-              onChange={(e) => set("orderNumber", e.target.value)}
-              fullWidth
-            />
-            <TextField
               label="Product Handle"
               value={form.productHandle}
               onChange={(e) => set("productHandle", e.target.value)}
               fullWidth
+              helperText="Shopify product handle (slug). Up to 2 QRs per handle (EN + JA)."
             />
             <TextField
               label="Product Title"
@@ -341,24 +388,10 @@ export default function ReviewRequests() {
               fullWidth
             />
             <TextField
-              label="Crocheter's Name"
-              value={form.crocheterName}
-              onChange={(e) => set("crocheterName", e.target.value)}
-              fullWidth
-            />
-            <TextField
               label="Coupon Code"
               value={form.couponCode}
               onChange={(e) => set("couponCode", e.target.value)}
               fullWidth
-            />
-            <TextField
-              label="Expires At"
-              type="date"
-              value={form.expiresAt}
-              onChange={(e) => set("expiresAt", e.target.value)}
-              fullWidth
-              slotProps={{ inputLabel: { shrink: true } }}
             />
           </Stack>
         </DialogContent>
@@ -366,6 +399,78 @@ export default function ReviewRequests() {
           <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleCreate} disabled={saving}>
             {saving ? "Creating…" : "Create"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Request Dialog */}
+      <Dialog
+        open={!!editTarget}
+        onClose={() => setEditTarget(null)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Edit Review Request</DialogTitle>
+        <DialogContent>
+          {editForm && (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <TextField
+                select
+                label="Language"
+                value={editForm.language}
+                onChange={(e) =>
+                  setEditForm((prev) => ({ ...prev, language: e.target.value }))
+                }
+                fullWidth
+              >
+                <MenuItem value="en">English</MenuItem>
+                <MenuItem value="ja">Japanese</MenuItem>
+              </TextField>
+              <TextField
+                label="Product Handle"
+                value={editForm.productHandle}
+                onChange={(e) =>
+                  setEditForm((prev) => ({
+                    ...prev,
+                    productHandle: e.target.value,
+                  }))
+                }
+                fullWidth
+                helperText="Shopify product handle (slug)."
+              />
+              <TextField
+                label="Product Title"
+                value={editForm.productTitle}
+                onChange={(e) =>
+                  setEditForm((prev) => ({
+                    ...prev,
+                    productTitle: e.target.value,
+                  }))
+                }
+                fullWidth
+              />
+              <TextField
+                label="Coupon Code"
+                value={editForm.couponCode}
+                onChange={(e) =>
+                  setEditForm((prev) => ({
+                    ...prev,
+                    couponCode: e.target.value,
+                  }))
+                }
+                fullWidth
+              />
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditTarget(null)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleEditSave}
+            disabled={saving}
+          >
+            {saving ? "Saving…" : "Save"}
           </Button>
         </DialogActions>
       </Dialog>
@@ -379,99 +484,78 @@ export default function ReviewRequests() {
               <Box
                 ref={qrCardRef}
                 sx={{
-                  width: 240,
-                  aspectRatio: "4 / 5",
-                  p: 1.5,
+                  width: "50mm",
+                  height: "50mm",
+                  boxSizing: "border-box",
+                  p: "2.5mm",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "1mm",
+                  bgcolor: "background.paper",
                   border: "1px solid",
                   borderColor: "divider",
                   borderRadius: 2,
-                  bgcolor: "background.paper",
-                  "@media print": {
-                    border: 0,
-                    p: 0,
-                  },
+                  "@media print": { border: 0, p: 0 },
                 }}
               >
-                <Stack spacing={1} sx={{ height: "100%" }}>
+                {/* QR fills all available vertical space */}
+                <Box
+                  sx={{
+                    flex: 1,
+                    minHeight: 0,
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    overflow: "hidden",
+                  }}
+                >
+                  <QRCodeSVG
+                    value={`${BASE_URL}/${qrTarget.token}`}
+                    size={256}
+                    style={{ width: "100%", height: "100%", display: "block" }}
+                  />
+                </Box>
+                {/* Footer: product name left, EN/JP badge right */}
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "1mm",
+                    flexShrink: 0,
+                  }}
+                >
                   <Typography
-                    variant="caption"
                     sx={{
+                      fontSize: "0.52rem",
+                      fontWeight: 700,
                       lineHeight: 1.2,
-                      textAlign: "center",
-                      fontWeight: 600,
-                      fontSize: "0.64rem",
+                      flex: 1,
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
                     }}
                   >
-                    {q.askMessage.replace("{name}", printCrocheterName)}
+                    {printTitle}
                   </Typography>
                   <Box
                     sx={{
-                      border: "1px solid",
-                      borderColor: "divider",
-                      borderRadius: 1,
-                      py: 0.75,
-                      display: "flex",
-                      justifyContent: "center",
+                      flexShrink: 0,
+                      bgcolor: "text.primary",
+                      color: "background.paper",
+                      px: "1.2mm",
+                      py: "0.4mm",
+                      borderRadius: "0.5mm",
+                      fontSize: "0.52rem",
+                      fontWeight: 800,
+                      lineHeight: 1,
+                      fontFamily: "monospace",
                     }}
                   >
-                    <QRCodeSVG
-                      value={`${BASE_URL}/${qrTarget.token}`}
-                      size={108}
-                    />
+                    {qrLanguageCode}
                   </Box>
-                  <Box sx={{ width: "100%" }}>
-                    <Typography
-                      variant="overline"
-                      color="text.secondary"
-                      sx={{
-                        fontWeight: 800,
-                        letterSpacing: 0.8,
-                        fontSize: "0.58rem",
-                      }}
-                    >
-                      {q.itemName}
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      fontWeight={700}
-                      sx={{ lineHeight: 1.15, fontSize: "0.72rem" }}
-                    >
-                      {printTitle}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ width: "100%" }}>
-                    <Typography
-                      variant="overline"
-                      color="text.secondary"
-                      sx={{
-                        fontWeight: 800,
-                        letterSpacing: 0.8,
-                        fontSize: "0.58rem",
-                      }}
-                    >
-                      {q.crocheterName}
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      fontWeight={600}
-                      sx={{ lineHeight: 1.15, fontSize: "0.72rem" }}
-                    >
-                      {printCrocheterName}
-                    </Typography>
-                  </Box>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      mt: 0.5,
-                      lineHeight: 1.2,
-                      fontSize: "0.64rem",
-                      fontWeight: 700,
-                      fontStyle: "italic",
-                    }}
-                  >
-                    {q.couponMessage}
-                  </Typography>
-                </Stack>
+                </Box>
               </Box>
             )}
             {qrTarget && (

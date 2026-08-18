@@ -1,13 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Checkbox,
   CircularProgress,
   Container,
   FormControlLabel,
+  IconButton,
   MenuItem,
   Rating,
   Stack,
@@ -17,6 +19,13 @@ import {
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { getReviewRequestByToken } from "../firebase/requestService";
 import { getSettings } from "../firebase/settingsService";
+import CROCHETER_NAMES from "../data/crocheters.json";
+import AddPhotoAlternateOutlined from "@mui/icons-material/AddPhotoAlternateOutlined";
+import CloseOutlined from "@mui/icons-material/CloseOutlined";
+import { uploadReviewImage } from "../firebase/storageService";
+
+const MAX_PUBLIC_PHOTOS = 3;
+const MAX_PHOTO_BYTES = 1.4 * 1024 * 1024; // 1.4 MB
 
 const detectDefaultLanguage = () => {
   if (typeof navigator === "undefined") return "en";
@@ -43,53 +52,68 @@ const UI_COPY = {
     used: "This review has already been submitted. Thank you!",
     writeReview: "Write a Review",
     product: "Product",
-    crocheterMessage:
-      "Please write a message to our crocheter {name} who made this bag.",
     rating: "Rating *",
     language: "Language",
     languageEn: "English",
     languageJa: "Japanese",
     yourName: "Your name",
     yourReview: "Your Review *",
-    permission: "I give permission to use my review for marketing purposes",
-    imagesOptional: "Images are optional and can be attached later if needed.",
+    crocheterLabel: "Please select Crocheter's name *",
+    permission: "I give permission to use my review for promotional purposes",
+    imagesOptional: "Images are optional.",
+    addPhoto: "Add Photo",
+    uploading: "Uploading…",
+    errorPhotoCount: "Maximum 3 photos allowed.",
+    errorPhotoSize: "File must be 1.4 MB or smaller.",
+    errorPhotoUpload: "Upload failed. Please try again.",
     submit: "Submit Review",
     submitting: "Submitting…",
     errorRating: "Please select a rating",
-    errorName: "Please enter your name",
-    errorBody: "Please write your review",
+    errorName: "Please enter your name (2-60 characters, no URLs)",
+    errorBody: "Please write your review (10-2000 characters, no URLs)",
+    errorCrocheter: "Please select who made this item",
     submitFailed: "Failed to submit. Please try again.",
   },
   ja: {
     invalid: "このレビューリンクは無効か有効期限切れです。",
-    used: "このレビューはすでに送信されています。ありがとうございます。",
+    used: "このレビューはすでに送信されています。ありがとうございます！",
     writeReview: "レビューを投稿する",
     product: "商品",
-    crocheterMessage:
-      "このバッグを作った編み手 {name} へのメッセージをご記入ください。",
     rating: "評価 *",
     language: "言語",
     languageEn: "英語",
     languageJa: "日本語",
     yourName: "お名前",
     yourReview: "レビュー内容 *",
-    permission: "レビューをウェブサイトやSNSで使用することに同意します",
-    imagesOptional: "画像は任意です。必要に応じて後から追加できます。",
+    crocheterLabel: "編み子さんのお名前を選んでください *",
+    permission: "レビューをプロモーション目的で使用することに同意します",
+    imagesOptional: "画像は任意です。",
+    addPhoto: "写真を追加",
+    uploading: "アップロード中…",
+    errorPhotoCount: "写真は最大3枚までです。",
+    errorPhotoSize: "ファイルは1.4MB以下にしてください。",
+    errorPhotoUpload: "アップロードに失敗しました。もう一度お試しください。",
     submit: "レビューを送信",
     submitting: "送信中…",
     errorRating: "評価を選択してください",
-    errorName: "お名前を入力してください",
-    errorBody: "レビュー内容を入力してください",
+    errorName: "お名前を入力してください（2～60文字、URL不可）",
+    errorBody: "レビュー内容を入力してください！10～2000文字、URL不可）",
+    errorCrocheter: "この商品を作った方を選択してください",
     submitFailed: "送信に失敗しました。もう一度お試しください。",
   },
 };
+
+const URL_RE = /https?:\/\/|www\./i;
 
 const INITIAL = {
   rating: 5,
   reviewerName: "",
   language: detectDefaultLanguage(),
   body: "",
+  crocheterName: "",
   permissionGranted: true,
+  website: "", // honeypot
+  pictureUrls: [],
 };
 
 export default function PublicReviewForm() {
@@ -100,8 +124,12 @@ export default function PublicReviewForm() {
   const [settings, setSettings] = useState({});
   const [pageStatus, setPageStatus] = useState("loading"); // loading | valid | used | invalid
   const [form, setForm] = useState(INITIAL);
+  const [formLoadedAt] = useState(() => Date.now());
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const pictureInputRef = useRef(null);
+  const [pictureUploading, setPictureUploading] = useState(false);
+  const [pictureError, setPictureError] = useState("");
   const language = form.language === "ja" ? "ja" : "en";
   const t = UI_COPY[language];
 
@@ -117,18 +145,9 @@ export default function PublicReviewForm() {
           setPageStatus("invalid");
           return;
         }
-        if (req.used) {
-          setPageStatus("used");
+        if (req.active === false) {
+          setPageStatus("invalid");
           return;
-        }
-        if (req.expiresAt) {
-          const expires = req.expiresAt?.toDate
-            ? req.expiresAt.toDate()
-            : new Date(req.expiresAt);
-          if (expires < new Date()) {
-            setPageStatus("invalid");
-            return;
-          }
         }
         const s = req.uid ? await getSettings(req.uid) : {};
         setSettings(s);
@@ -151,9 +170,41 @@ export default function PublicReviewForm() {
   const validate = () => {
     const e = {};
     if (!form.rating) e.rating = t.errorRating;
-    if (!form.reviewerName.trim()) e.reviewerName = t.errorName;
-    if (!form.body.trim()) e.body = t.errorBody;
+    const name = form.reviewerName.trim();
+    if (!name || name.length < 2 || name.length > 60 || URL_RE.test(name))
+      e.reviewerName = t.errorName;
+    const body = form.body.trim();
+    if (!body || body.length < 10 || body.length > 2000 || URL_RE.test(body))
+      e.body = t.errorBody;
+    if (!form.crocheterName) e.crocheterName = t.errorCrocheter;
     return e;
+  };
+
+  const handlePictureUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if ((form.pictureUrls?.length ?? 0) >= MAX_PUBLIC_PHOTOS) {
+      setPictureError(t.errorPhotoCount);
+      return;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      setPictureError(t.errorPhotoSize);
+      return;
+    }
+    setPictureUploading(true);
+    setPictureError("");
+    try {
+      const { downloadURL } = await uploadReviewImage(file);
+      setForm((prev) => ({
+        ...prev,
+        pictureUrls: [...(prev.pictureUrls ?? []), downloadURL],
+      }));
+    } catch {
+      setPictureError(t.errorPhotoUpload);
+    } finally {
+      setPictureUploading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -176,7 +227,11 @@ export default function PublicReviewForm() {
         rating: form.rating,
         language: form.language,
         body: form.body,
+        crocheterName: form.crocheterName,
         permissionGranted: form.permissionGranted,
+        pictureUrls: form.pictureUrls,
+        website: form.website,
+        formLoadedAt,
       });
       navigate("/thank-you", {
         state: {
@@ -204,7 +259,7 @@ export default function PublicReviewForm() {
   if (pageStatus === "used") {
     return (
       <Container maxWidth="sm" sx={{ mt: 8 }}>
-        <Alert severity="info">{t.used}</Alert>
+        <Alert severity="info">{t.invalid}</Alert>
       </Container>
     );
   }
@@ -231,11 +286,6 @@ export default function PublicReviewForm() {
         {request.productTitle && (
           <Typography variant="body2" color="text.secondary" gutterBottom>
             {t.product}: {request.productTitle}
-          </Typography>
-        )}
-        {request.crocheterName && (
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            {t.crocheterMessage.replace("{name}", request.crocheterName)}
           </Typography>
         )}
 
@@ -293,6 +343,32 @@ export default function PublicReviewForm() {
               helperText={errors.body}
             />
 
+            <Autocomplete
+              options={CROCHETER_NAMES}
+              value={form.crocheterName || null}
+              onChange={(_, val) => set("crocheterName", val ?? "")}
+              disableClearable={false}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label={t.crocheterLabel}
+                  error={!!errors.crocheterName}
+                  helperText={errors.crocheterName}
+                />
+              )}
+            />
+
+            {/* honeypot: visually hidden, traps bots that fill all fields */}
+            <TextField
+              name="website"
+              value={form.website}
+              onChange={(e) => set("website", e.target.value)}
+              tabIndex={-1}
+              autoComplete="off"
+              aria-hidden="true"
+              sx={{ position: "absolute", left: "-9999px", opacity: 0 }}
+            />
+
             <FormControlLabel
               control={
                 <Checkbox
@@ -303,9 +379,98 @@ export default function PublicReviewForm() {
               label={t.permission}
             />
 
-            <Typography variant="caption" color="text.secondary">
-              {t.imagesOptional}
-            </Typography>
+            {/* Image upload — files go to Storage before submit */}
+            <Box>
+              <input
+                ref={pictureInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={handlePictureUpload}
+              />
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={
+                    pictureUploading ? (
+                      <CircularProgress size={16} />
+                    ) : (
+                      <AddPhotoAlternateOutlined />
+                    )
+                  }
+                  onClick={() => pictureInputRef.current?.click()}
+                  disabled={
+                    pictureUploading ||
+                    (form.pictureUrls?.length ?? 0) >= MAX_PUBLIC_PHOTOS
+                  }
+                >
+                  {pictureUploading ? t.uploading : t.addPhoto}
+                </Button>
+                <Typography variant="caption" color="text.secondary">
+                  {t.imagesOptional}
+                </Typography>
+              </Stack>
+              {pictureError && (
+                <Typography
+                  variant="caption"
+                  color="error"
+                  display="block"
+                  sx={{ mt: 0.5 }}
+                >
+                  {pictureError}
+                </Typography>
+              )}
+              {Array.isArray(form.pictureUrls) &&
+                form.pictureUrls.length > 0 && (
+                  <Box
+                    sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1 }}
+                  >
+                    {form.pictureUrls.map((url, i) => (
+                      <Box
+                        key={i}
+                        sx={{ position: "relative", width: 80, height: 80 }}
+                      >
+                        <Box
+                          component="img"
+                          src={url}
+                          alt={`Review photo ${i + 1}`}
+                          sx={{
+                            width: 80,
+                            height: 80,
+                            objectFit: "cover",
+                            borderRadius: 1,
+                            border: "1px solid",
+                            borderColor: "divider",
+                          }}
+                        />
+                        <IconButton
+                          size="small"
+                          sx={{
+                            position: "absolute",
+                            top: -8,
+                            right: -8,
+                            bgcolor: "background.paper",
+                            border: "1px solid",
+                            borderColor: "divider",
+                            p: 0.25,
+                          }}
+                          onClick={() =>
+                            setForm((prev) => ({
+                              ...prev,
+                              pictureUrls: prev.pictureUrls.filter(
+                                (_, idx) => idx !== i,
+                              ),
+                            }))
+                          }
+                        >
+                          <CloseOutlined sx={{ fontSize: 14 }} />
+                        </IconButton>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+            </Box>
 
             <Button
               type="submit"

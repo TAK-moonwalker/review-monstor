@@ -2,7 +2,10 @@ const { setGlobalOptions } = require("firebase-functions");
 const { onCall, onRequest, HttpsError } =
   require("firebase-functions/v2/https");
 const { initializeApp } = require("firebase-admin/app");
-const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const { getFirestore, FieldValue, Timestamp } =
+  require("firebase-admin/firestore");
+const crypto = require("crypto");
+const CROCHETER_NAMES = require("./crocheters");
 
 const projectId =
   process.env.GCLOUD_PROJECT ||
@@ -140,29 +143,75 @@ exports.submitReviewByToken = onCall(async (request) => {
     rating,
     title,
     body,
+    crocheterName,
     permissionGranted,
     language,
+    pictureUrls: rawPictureUrls,
+    website,
+    formLoadedAt,
   } = request.data;
+
+  // Honeypot: bots that fill hidden fields get a silent no-op response.
+  if (website && String(website).trim().length > 0) {
+    return {
+      success: true, reviewId: null,
+      couponEnabled: false, couponCode: "", thankYouMessage: "",
+    };
+  }
+
+  // Timing check: reject submissions under 3 seconds (likely automated).
+  if (typeof formLoadedAt === "number" && Date.now() - formLoadedAt < 3000) {
+    throw new HttpsError("invalid-argument", "Please try again.");
+  }
+
   const normalizedLanguage = String(language || "")
     .toLowerCase()
     .startsWith("ja") ? "ja" : "en";
   const reviewBody = String(body || "").trim();
   const reviewRating = Number(rating) || 5;
+  const reviewerNameTrimmed = String(reviewerName || "").trim();
+  const URL_RE = /https?:\/\/|www\./i;
 
   // Input validation
   if (!token || typeof token !== "string") {
     throw new HttpsError("invalid-argument", "token is required");
   }
-  if (!reviewerName || typeof reviewerName !== "string" ||
-    reviewerName.trim().length === 0) {
-    throw new HttpsError("invalid-argument", "Display name is required");
+  if (
+    !reviewerNameTrimmed ||
+    reviewerNameTrimmed.length < 2 ||
+    reviewerNameTrimmed.length > 60 ||
+    URL_RE.test(reviewerNameTrimmed)
+  ) {
+    throw new HttpsError("invalid-argument", "Display name is invalid");
   }
-  if (!reviewBody) {
-    throw new HttpsError("invalid-argument", "Review body is required");
+  if (
+    !reviewBody || reviewBody.length < 10 ||
+    reviewBody.length > 2000 || URL_RE.test(reviewBody)
+  ) {
+    throw new HttpsError("invalid-argument", "Review body is invalid");
   }
   if (reviewRating < 1 || reviewRating > 5) {
+    throw new HttpsError("invalid-argument", "Rating must be between 1 and 5");
+  }
+
+  // Crocheter name must be from the approved whitelist.
+  const crocheterTrimmed = String(crocheterName || "").trim();
+  if (!CROCHETER_NAMES.includes(crocheterTrimmed)) {
     throw new HttpsError(
-      "invalid-argument", "Rating must be between 1 and 5");
+      "invalid-argument", "Please select a valid crocheter name");
+  }
+
+  const STORAGE_URL_RE = /^https:\/\/firebasestorage\.googleapis\.com\//;
+  const validatedPictureUrls = Array.isArray(rawPictureUrls) ?
+    rawPictureUrls.filter((u) => typeof u === "string" && u.length > 0) :
+    [];
+  if (validatedPictureUrls.length > 3) {
+    throw new HttpsError("invalid-argument", "Maximum 3 images allowed");
+  }
+  if (validatedPictureUrls.some(
+    (u) => !STORAGE_URL_RE.test(u) || u.length > 2000,
+  )) {
+    throw new HttpsError("invalid-argument", "Invalid image URL");
   }
 
   // Look up the review request by token
@@ -179,24 +228,34 @@ exports.submitReviewByToken = onCall(async (request) => {
   const reqDoc = reqSnap.docs[0];
   const reqData = reqDoc.data();
 
-  if (reqData.used === true) {
+  if (reqData.active === false) {
     throw new HttpsError(
       "failed-precondition",
-      "This review link has already been used");
+      "This review link is no longer accepting reviews");
   }
 
-  if (reqData.expiresAt) {
-    const expires = reqData.expiresAt.toDate ?
-      reqData.expiresAt.toDate() :
-      new Date(reqData.expiresAt);
-    if (expires < new Date()) {
-      throw new HttpsError(
-        "failed-precondition",
-        "This review link has expired");
-    }
+  // Rate limiting: block same IP+token within 24 hours.
+  const rawReq = request.rawRequest || {};
+  const forwardedFor =
+    (rawReq.headers && rawReq.headers["x-forwarded-for"]) || "";
+  const ip = forwardedFor.split(",")[0].trim() || rawReq.ip || "";
+  const ipHash = crypto.createHash("sha256").update(ip + token).digest("hex");
+  const since = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
+  const logSnap = await db
+    .collection("reviewSubmissionLogs")
+    .where("ipHash", "==", ipHash)
+    .where("createdAt", ">=", since)
+    .limit(1)
+    .get();
+
+  if (!logSnap.empty) {
+    throw new HttpsError(
+      "resource-exhausted",
+      "You have already submitted a review recently. Thank you!",
+    );
   }
 
-  // Read settings for the store owner (identified by uid on the review request)
+  // Read settings for the store owner
   const settingsSnap = reqData.uid ?
     await db.collection("settings").doc(reqData.uid).get() :
     null;
@@ -207,21 +266,22 @@ exports.submitReviewByToken = onCall(async (request) => {
     String(settings.couponCode || "").trim() : "";
   const resolvedCouponCode = requestCouponCode || settingsCouponCode;
 
-  // Atomic write: create review + mark request used
+  // Write review + rate-limit log entry atomically
   const reviewRef = db.collection("reviews").doc();
+  const logRef = db.collection("reviewSubmissionLogs").doc();
 
   await db.runTransaction(async (tx) => {
-    // Re-read inside transaction to prevent race conditions
+    // Re-check active flag to guard against concurrent deactivation.
     const freshReq = await tx.get(reqDoc.ref);
-    if (!freshReq.exists || freshReq.data().used === true) {
+    if (!freshReq.exists || freshReq.data().active === false) {
       throw new HttpsError(
         "failed-precondition",
-        "This review link has already been used");
+        "This review link is no longer accepting reviews");
     }
 
     tx.set(reviewRef, {
       uid: reqData.uid || null,
-      reviewerName: reviewerName.trim(),
+      reviewerName: reviewerNameTrimmed,
       reviewerEmail: reviewerEmail || "",
       rating: reviewRating,
       title: title || "",
@@ -231,9 +291,10 @@ exports.submitReviewByToken = onCall(async (request) => {
       reviewLanguage: normalizedLanguage,
       reviewDate: FieldValue.serverTimestamp(),
       permissionGranted: permissionGranted === true,
+      pictureUrls: validatedPictureUrls,
       productHandle: reqData.productHandle || "",
       productTitle: reqData.productTitle || "",
-      crocheterName: reqData.crocheterName || "",
+      crocheterName: crocheterTrimmed,
       source: "qr_form",
       status: settings.defaultReviewStatus || "draft",
       verified: false,
@@ -242,12 +303,19 @@ exports.submitReviewByToken = onCall(async (request) => {
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    tx.update(reqDoc.ref, {
-      used: true,
-      submittedReviewId: reviewRef.id,
-      updatedAt: FieldValue.serverTimestamp(),
+    tx.set(logRef, {
+      token,
+      ipHash,
+      createdAt: FieldValue.serverTimestamp(),
     });
   });
+
+  // Best-effort submission counter increment for admin visibility.
+  db.collection("reviewRequests").doc(reqDoc.id)
+    .update({
+      submissionCount: FieldValue.increment(1),
+      updatedAt: FieldValue.serverTimestamp(),
+    }).catch(() => { });
 
   return {
     success: true,

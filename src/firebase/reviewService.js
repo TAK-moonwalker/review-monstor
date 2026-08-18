@@ -25,6 +25,7 @@ const defaults = {
   productHandle: '',
   productTitle: '',
   isBrandTestimonial: false,
+  crocheterName: '',
   title: '',
   titleJa: '',
   titleEn: '',
