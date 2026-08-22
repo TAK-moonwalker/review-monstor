@@ -51,6 +51,7 @@ const UI_COPY = {
     invalid: "This review link is invalid or has expired.",
     used: "This review has already been submitted. Thank you!",
     writeReview: "Write a Review",
+    reviewSharing: "We share the review to each crocheter who made this bag.",
     product: "Product",
     rating: "Rating *",
     language: "Language",
@@ -78,6 +79,8 @@ const UI_COPY = {
     invalid: "このレビューリンクは無効か有効期限切れです。",
     used: "このレビューはすでに送信されています。ありがとうございます！",
     writeReview: "レビューを投稿する",
+    reviewSharing:
+      "このバッグを作った編み子さん一人ひとりにレビューを共有します。",
     product: "商品",
     rating: "評価 *",
     language: "言語",
@@ -277,6 +280,9 @@ export default function PublicReviewForm() {
       <Box sx={{ mt: 4, mb: 6 }}>
         <Typography variant="h5" fontWeight={700} gutterBottom>
           {settings.reviewFormTitle || t.writeReview}
+        </Typography>
+        <Typography color="text.secondary" sx={{ mb: 1 }}>
+          {t.reviewSharing}
         </Typography>
         {settings.reviewFormDescription && (
           <Typography color="text.secondary" sx={{ mb: 1 }}>

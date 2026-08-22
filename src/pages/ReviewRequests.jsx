@@ -41,8 +41,8 @@ import EmptyState from "../components/EmptyState";
 import { formatDate } from "../utils/dateUtils";
 
 const BASE_URL = `${window.location.origin}/review`;
-const QR_EXPORT_WIDTH_PX = 591; // 50 mm @ 300 dpi
-const QR_EXPORT_HEIGHT_PX = 591;
+const QR_EXPORT_WIDTH_PX = 295; // 25 mm @ 300 dpi
+const QR_EXPORT_HEIGHT_PX = 295;
 
 const getInitialForm = () => ({
   language: "en",
@@ -182,7 +182,7 @@ export default function ReviewRequests() {
 
       const link = document.createElement("a");
       link.href = dataUrl;
-      link.download = `qr-label-${slug || "item"}-50x50mm.jpg`;
+      link.download = `qr-label-${slug || "item"}-25x25mm.jpg`;
       link.click();
     } finally {
       setDownloading(false);
@@ -484,8 +484,8 @@ export default function ReviewRequests() {
               <Box
                 ref={qrCardRef}
                 sx={{
-                  width: "50mm",
-                  height: "50mm",
+                  width: "25mm",
+                  height: "25mm",
                   boxSizing: "border-box",
                   p: "2.5mm",
                   display: "flex",
