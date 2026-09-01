@@ -143,6 +143,8 @@ exports.submitReviewByToken = onCall(async (request) => {
     rating,
     title,
     body,
+    productTitle,
+    productHandle,
     crocheterName,
     permissionGranted,
     language,
@@ -194,13 +196,6 @@ exports.submitReviewByToken = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "Rating must be between 1 and 5");
   }
 
-  // Crocheter name must be from the approved whitelist.
-  const crocheterTrimmed = String(crocheterName || "").trim();
-  if (!CROCHETER_NAMES.includes(crocheterTrimmed)) {
-    throw new HttpsError(
-      "invalid-argument", "Please select a valid crocheter name");
-  }
-
   const STORAGE_URL_RE = /^https:\/\/firebasestorage\.googleapis\.com\//;
   const validatedPictureUrls = Array.isArray(rawPictureUrls) ?
     rawPictureUrls.filter((u) => typeof u === "string" && u.length > 0) :
@@ -234,6 +229,37 @@ exports.submitReviewByToken = onCall(async (request) => {
       "This review link is no longer accepting reviews");
   }
 
+  // Read settings for the store owner
+  const settingsSnap = reqData.uid ?
+    await db.collection("settings").doc(reqData.uid).get() :
+    null;
+  const settings = (settingsSnap && settingsSnap.exists) ?
+    settingsSnap.data() : {};
+
+  // Crocheter name must be in the approved list (settings or fallback)
+  const hasCustomCrocheters =
+    Array.isArray(settings.crocheterList) &&
+    settings.crocheterList.length > 0;
+  const allowedCrocheters = hasCustomCrocheters ?
+    settings.crocheterList :
+    CROCHETER_NAMES;
+  const crocheterTrimmed = String(crocheterName || "").trim();
+  if (
+    !crocheterTrimmed ||
+    (allowedCrocheters.length > 0 &&
+      !allowedCrocheters.includes(crocheterTrimmed))
+  ) {
+    throw new HttpsError(
+      "invalid-argument", "Please select a valid crocheter name");
+  }
+
+  const resolvedProductTitle = String(
+    productTitle || reqData.productTitle || "",
+  ).trim();
+  const resolvedProductHandle = String(
+    productHandle || reqData.productHandle || "",
+  ).trim();
+
   // Rate limiting: block same IP+token within 24 hours.
   const rawReq = request.rawRequest || {};
   const forwardedFor =
@@ -255,12 +281,6 @@ exports.submitReviewByToken = onCall(async (request) => {
     );
   }
 
-  // Read settings for the store owner
-  const settingsSnap = reqData.uid ?
-    await db.collection("settings").doc(reqData.uid).get() :
-    null;
-  const settings = (settingsSnap && settingsSnap.exists) ?
-    settingsSnap.data() : {};
   const requestCouponCode = String(reqData.couponCode || "").trim();
   const settingsCouponCode = settings.couponEnabled ?
     String(settings.couponCode || "").trim() : "";
@@ -292,8 +312,8 @@ exports.submitReviewByToken = onCall(async (request) => {
       reviewDate: FieldValue.serverTimestamp(),
       permissionGranted: permissionGranted === true,
       pictureUrls: validatedPictureUrls,
-      productHandle: reqData.productHandle || "",
-      productTitle: reqData.productTitle || "",
+      productHandle: resolvedProductHandle,
+      productTitle: resolvedProductTitle,
       crocheterName: crocheterTrimmed,
       source: "qr_form",
       status: settings.defaultReviewStatus || "draft",

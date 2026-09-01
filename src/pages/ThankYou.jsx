@@ -16,6 +16,7 @@ import ContentCopyOutlined from "@mui/icons-material/ContentCopyOutlined";
 import { useSettings } from "../hooks/useSettings";
 
 const SHOP_URL = "https://shopify.sulci.co.jp/";
+const SHOP_URL_EN = "https://sulciglobal.com/";
 
 const detectDefaultLanguage = () => {
   if (typeof navigator === "undefined") return "en";
@@ -116,9 +117,19 @@ export default function ThankYou() {
                   target="_blank"
                   rel="noopener noreferrer"
                   size="small"
-                  sx={{ mt: 0.5 }}
+                  sx={{ mt: 0.5, display: "block" }}
                 >
                   {SHOP_URL}
+                </Button>
+                <Button
+                  component="a"
+                  href={SHOP_URL_EN}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  size="small"
+                  sx={{ mt: 0.5, textTransform: "none", display: "block" }}
+                >
+                  English Store → {SHOP_URL_EN}
                 </Button>
               </Box>
             </CardContent>

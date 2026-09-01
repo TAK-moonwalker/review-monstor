@@ -20,6 +20,7 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import { getReviewRequestByToken } from "../firebase/requestService";
 import { getSettings } from "../firebase/settingsService";
 import CROCHETER_NAMES from "../data/crocheters.json";
+import DEFAULT_ITEMS from "../data/items.json";
 import AddPhotoAlternateOutlined from "@mui/icons-material/AddPhotoAlternateOutlined";
 import CloseOutlined from "@mui/icons-material/CloseOutlined";
 import { uploadReviewImage } from "../firebase/storageService";
@@ -53,6 +54,7 @@ const UI_COPY = {
     writeReview: "Write a Review",
     reviewSharing: "We share the review to each crocheter who made this bag.",
     product: "Product",
+    itemLabel: "Please select an item *",
     rating: "Rating *",
     language: "Language",
     languageEn: "English",
@@ -69,6 +71,7 @@ const UI_COPY = {
     errorPhotoUpload: "Upload failed. Please try again.",
     submit: "Submit Review",
     submitting: "Submitting…",
+    errorProduct: "Please select an item",
     errorRating: "Please select a rating",
     errorName: "Please enter your name (2-60 characters, no URLs)",
     errorBody: "Please write your review (10-2000 characters, no URLs)",
@@ -82,6 +85,7 @@ const UI_COPY = {
     reviewSharing:
       "このバッグを作った編み子さん一人ひとりにレビューを共有します。",
     product: "商品",
+    itemLabel: "商品を選んでください *",
     rating: "評価 *",
     language: "言語",
     languageEn: "英語",
@@ -98,6 +102,7 @@ const UI_COPY = {
     errorPhotoUpload: "アップロードに失敗しました。もう一度お試しください。",
     submit: "レビューを送信",
     submitting: "送信中…",
+    errorProduct: "商品を選択してください",
     errorRating: "評価を選択してください",
     errorName: "お名前を入力してください（2～60文字、URL不可）",
     errorBody: "レビュー内容を入力してください！10～2000文字、URL不可）",
@@ -113,6 +118,8 @@ const INITIAL = {
   reviewerName: "",
   language: detectDefaultLanguage(),
   body: "",
+  productTitle: "",
+  productHandle: "",
   crocheterName: "",
   permissionGranted: true,
   website: "", // honeypot
@@ -123,7 +130,6 @@ export default function PublicReviewForm() {
   const { token } = useParams();
   const normalizedToken = normalizeTokenParam(token);
   const navigate = useNavigate();
-  const [request, setRequest] = useState(null);
   const [settings, setSettings] = useState({});
   const [pageStatus, setPageStatus] = useState("loading"); // loading | valid | used | invalid
   const [form, setForm] = useState(INITIAL);
@@ -135,6 +141,16 @@ export default function PublicReviewForm() {
   const [pictureError, setPictureError] = useState("");
   const language = form.language === "ja" ? "ja" : "en";
   const t = UI_COPY[language];
+
+  const availableItems =
+    Array.isArray(settings.itemList) && settings.itemList.length > 0
+      ? settings.itemList
+      : DEFAULT_ITEMS;
+
+  const availableCrocheters =
+    Array.isArray(settings.crocheterList) && settings.crocheterList.length > 0
+      ? settings.crocheterList
+      : CROCHETER_NAMES;
 
   useEffect(() => {
     const loadData = async () => {
@@ -154,11 +170,13 @@ export default function PublicReviewForm() {
         }
         const s = req.uid ? await getSettings(req.uid) : {};
         setSettings(s);
-        setRequest(req);
         setForm((prev) => ({
           ...prev,
           reviewerName: req.customerName || "",
-          language: detectDefaultLanguage(),
+          language: req.language || detectDefaultLanguage(),
+          productTitle: req.productTitle || "",
+          productHandle: req.productHandle || "",
+          crocheterName: req.crocheterName || "",
         }));
         setPageStatus("valid");
       } catch {
@@ -176,6 +194,7 @@ export default function PublicReviewForm() {
     const name = form.reviewerName.trim();
     if (!name || name.length < 2 || name.length > 60 || URL_RE.test(name))
       e.reviewerName = t.errorName;
+    if (!form.productTitle) e.productTitle = t.errorProduct;
     const body = form.body.trim();
     if (!body || body.length < 10 || body.length > 2000 || URL_RE.test(body))
       e.body = t.errorBody;
@@ -230,6 +249,8 @@ export default function PublicReviewForm() {
         rating: form.rating,
         language: form.language,
         body: form.body,
+        productTitle: form.productTitle,
+        productHandle: form.productHandle,
         crocheterName: form.crocheterName,
         permissionGranted: form.permissionGranted,
         pictureUrls: form.pictureUrls,
@@ -289,11 +310,6 @@ export default function PublicReviewForm() {
             {settings.reviewFormDescription}
           </Typography>
         )}
-        {request.productTitle && (
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            {t.product}: {request.productTitle}
-          </Typography>
-        )}
 
         {errors.form && (
           <Alert severity="error" sx={{ mb: 2 }}>
@@ -338,6 +354,51 @@ export default function PublicReviewForm() {
               error={!!errors.reviewerName}
               helperText={errors.reviewerName}
             />
+
+            <Autocomplete
+              options={availableItems}
+              getOptionLabel={(option) => {
+                if (typeof option === "string") return option;
+                return option.title || option.name || option.handle || "";
+              }}
+              isOptionEqualToValue={(option, val) =>
+                (option.handle && option.handle === val?.handle) ||
+                (option.title &&
+                  (option.title === val?.title || option.title === val?.name))
+              }
+              value={
+                availableItems.find(
+                  (it) =>
+                    (it.title && it.title === form.productTitle) ||
+                    (it.name && it.name === form.productTitle) ||
+                    (it.handle && it.handle === form.productHandle),
+                ) || null
+              }
+              onChange={(_, val) => {
+                if (val) {
+                  setForm((prev) => ({
+                    ...prev,
+                    productTitle: val.title || val.name || "",
+                    productHandle: val.handle || "",
+                  }));
+                } else {
+                  setForm((prev) => ({
+                    ...prev,
+                    productTitle: "",
+                    productHandle: "",
+                  }));
+                }
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label={t.itemLabel}
+                  error={!!errors.productTitle}
+                  helperText={errors.productTitle}
+                />
+              )}
+            />
+
             <TextField
               label={t.yourReview}
               value={form.body}
@@ -350,7 +411,7 @@ export default function PublicReviewForm() {
             />
 
             <Autocomplete
-              options={CROCHETER_NAMES}
+              options={availableCrocheters}
               value={form.crocheterName || null}
               onChange={(_, val) => set("crocheterName", val ?? "")}
               disableClearable={false}

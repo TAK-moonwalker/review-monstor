@@ -29,6 +29,7 @@ export const createReviewRequest = (uid, data) =>
     productTitle: data.productTitle ?? '',
     crocheterName: data.crocheterName ?? '',
     couponCode: data.couponCode ?? '',
+    shopUrl: data.shopUrl ?? '',
     used: false,
     active: data.active ?? true,
     submittedReviewId: null,
