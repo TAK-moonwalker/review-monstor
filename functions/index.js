@@ -1,10 +1,13 @@
 const { setGlobalOptions } = require("firebase-functions");
 const { onCall, onRequest, HttpsError } =
   require("firebase-functions/v2/https");
+const { onObjectFinalized } = require("firebase-functions/v2/storage");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } =
   require("firebase-admin/firestore");
+const { getStorage } = require("firebase-admin/storage");
 const crypto = require("crypto");
+const sharp = require("sharp");
 const CROCHETER_NAMES = require("./crocheters");
 
 const projectId =
@@ -18,6 +21,7 @@ setGlobalOptions({ maxInstances: 10, region: "us-central1" });
 let db;
 
 const MAX_LIMIT = 100;
+const MAX_UPLOAD_BYTES = 5033165; // 4.8 MB, must match storage.rules
 const ALLOWED_PUBLIC_ORIGINS = new Set([
   "http://localhost:5173",
   "https://review-monster-80750.web.app",
@@ -70,6 +74,56 @@ function shuffle(list) {
     clone[j] = temp;
   }
   return clone;
+}
+
+// Bilingual error copy for submitReviewByToken, keyed by error id.
+const SUBMIT_REVIEW_ERRORS = {
+  tryAgain: { en: "Please try again.", ja: "もう一度お試しください。" },
+  tokenRequired: { en: "token is required", ja: "トークンが必要です。" },
+  invalidName: {
+    en: "Display name is invalid",
+    ja: "お名前が正しくありません（2〜60文字、URL不可）",
+  },
+  invalidBody: {
+    en: "Review body is invalid",
+    ja: "レビュー内容が正しくありません（10〜2000文字、URL不可）",
+  },
+  invalidRating: {
+    en: "Rating must be between 1 and 5",
+    ja: "評価は1〜5の範囲で選択してください。",
+  },
+  tooManyImages: {
+    en: "Maximum 3 images allowed",
+    ja: "画像は最大3枚までです。",
+  },
+  invalidImageUrl: {
+    en: "Invalid image URL",
+    ja: "画像のURLが正しくありません。",
+  },
+  invalidLink: { en: "Invalid review link", ja: "レビューリンクが無効です。" },
+  linkClosed: {
+    en: "This review link is no longer accepting reviews",
+    ja: "このレビューリンクは現在レビューを受け付けていません。",
+  },
+  invalidCrocheter: {
+    en: "Please select a valid crocheter name",
+    ja: "有効な編み子さんのお名前を選択してください。",
+  },
+  rateLimited: {
+    en: "You cannot post a review within 24 hours of your previous review.",
+    ja: "前回のレビューから24時間以内は新しいレビューを投稿できません。",
+  },
+};
+
+/**
+ * Looks up a bilingual error message for submitReviewByToken.
+ * @param {string} lang Normalized language, "en" or "ja".
+ * @param {string} key Key into SUBMIT_REVIEW_ERRORS.
+ * @return {string} Localized message.
+ */
+function submitReviewError(lang, key) {
+  const entry = SUBMIT_REVIEW_ERRORS[key];
+  return (lang === "ja" && entry.ja) || entry.en;
 }
 
 /**
@@ -161,14 +215,16 @@ exports.submitReviewByToken = onCall(async (request) => {
     };
   }
 
-  // Timing check: reject submissions under 3 seconds (likely automated).
-  if (typeof formLoadedAt === "number" && Date.now() - formLoadedAt < 3000) {
-    throw new HttpsError("invalid-argument", "Please try again.");
-  }
-
   const normalizedLanguage = String(language || "")
     .toLowerCase()
     .startsWith("ja") ? "ja" : "en";
+
+  // Timing check: reject submissions under 3 seconds (likely automated).
+  if (typeof formLoadedAt === "number" && Date.now() - formLoadedAt < 3000) {
+    throw new HttpsError(
+      "invalid-argument", submitReviewError(normalizedLanguage, "tryAgain"));
+  }
+
   const reviewBody = String(body || "").trim();
   const reviewRating = Number(rating) || 5;
   const reviewerNameTrimmed = String(reviewerName || "").trim();
@@ -176,7 +232,9 @@ exports.submitReviewByToken = onCall(async (request) => {
 
   // Input validation
   if (!token || typeof token !== "string") {
-    throw new HttpsError("invalid-argument", "token is required");
+    throw new HttpsError(
+      "invalid-argument",
+      submitReviewError(normalizedLanguage, "tokenRequired"));
   }
   if (
     !reviewerNameTrimmed ||
@@ -184,16 +242,20 @@ exports.submitReviewByToken = onCall(async (request) => {
     reviewerNameTrimmed.length > 60 ||
     URL_RE.test(reviewerNameTrimmed)
   ) {
-    throw new HttpsError("invalid-argument", "Display name is invalid");
+    throw new HttpsError(
+      "invalid-argument", submitReviewError(normalizedLanguage, "invalidName"));
   }
   if (
     !reviewBody || reviewBody.length < 10 ||
     reviewBody.length > 2000 || URL_RE.test(reviewBody)
   ) {
-    throw new HttpsError("invalid-argument", "Review body is invalid");
+    throw new HttpsError(
+      "invalid-argument", submitReviewError(normalizedLanguage, "invalidBody"));
   }
   if (reviewRating < 1 || reviewRating > 5) {
-    throw new HttpsError("invalid-argument", "Rating must be between 1 and 5");
+    throw new HttpsError(
+      "invalid-argument",
+      submitReviewError(normalizedLanguage, "invalidRating"));
   }
 
   const STORAGE_URL_RE = /^https:\/\/firebasestorage\.googleapis\.com\//;
@@ -201,12 +263,16 @@ exports.submitReviewByToken = onCall(async (request) => {
     rawPictureUrls.filter((u) => typeof u === "string" && u.length > 0) :
     [];
   if (validatedPictureUrls.length > 3) {
-    throw new HttpsError("invalid-argument", "Maximum 3 images allowed");
+    throw new HttpsError(
+      "invalid-argument",
+      submitReviewError(normalizedLanguage, "tooManyImages"));
   }
   if (validatedPictureUrls.some(
     (u) => !STORAGE_URL_RE.test(u) || u.length > 2000,
   )) {
-    throw new HttpsError("invalid-argument", "Invalid image URL");
+    throw new HttpsError(
+      "invalid-argument",
+      submitReviewError(normalizedLanguage, "invalidImageUrl"));
   }
 
   // Look up the review request by token
@@ -217,7 +283,8 @@ exports.submitReviewByToken = onCall(async (request) => {
     .get();
 
   if (reqSnap.empty) {
-    throw new HttpsError("not-found", "Invalid review link");
+    throw new HttpsError(
+      "not-found", submitReviewError(normalizedLanguage, "invalidLink"));
   }
 
   const reqDoc = reqSnap.docs[0];
@@ -226,7 +293,7 @@ exports.submitReviewByToken = onCall(async (request) => {
   if (reqData.active === false) {
     throw new HttpsError(
       "failed-precondition",
-      "This review link is no longer accepting reviews");
+      submitReviewError(normalizedLanguage, "linkClosed"));
   }
 
   // Read settings for the store owner
@@ -250,7 +317,8 @@ exports.submitReviewByToken = onCall(async (request) => {
       !allowedCrocheters.includes(crocheterTrimmed))
   ) {
     throw new HttpsError(
-      "invalid-argument", "Please select a valid crocheter name");
+      "invalid-argument",
+      submitReviewError(normalizedLanguage, "invalidCrocheter"));
   }
 
   const resolvedProductTitle = String(
@@ -277,7 +345,7 @@ exports.submitReviewByToken = onCall(async (request) => {
   if (!logSnap.empty) {
     throw new HttpsError(
       "resource-exhausted",
-      "You have already submitted a review recently. Thank you!",
+      submitReviewError(normalizedLanguage, "rateLimited"),
     );
   }
 
@@ -296,7 +364,7 @@ exports.submitReviewByToken = onCall(async (request) => {
     if (!freshReq.exists || freshReq.data().active === false) {
       throw new HttpsError(
         "failed-precondition",
-        "This review link is no longer accepting reviews");
+        submitReviewError(normalizedLanguage, "linkClosed"));
     }
 
     tx.set(reviewRef, {
@@ -315,7 +383,7 @@ exports.submitReviewByToken = onCall(async (request) => {
       productHandle: resolvedProductHandle,
       productTitle: resolvedProductTitle,
       crocheterName: crocheterTrimmed,
-      source: "qr_form",
+      source: "qr",
       status: settings.defaultReviewStatus || "draft",
       verified: false,
       exportedToJudgeMe: false,
@@ -452,4 +520,108 @@ exports.publicReviews = onRequest(async (req, res) => {
     res.status(500).json({ error: "Failed to load public reviews" });
   }
 });
+
+/**
+ * processReviewImage
+ *
+ * Storage trigger: fires when a raw photo lands under
+ * review-images/uploads/{uploadId}.{ext}. Converts it into two WebP
+ * derivatives (display + thumbnail), uploads them under
+ * review-images/display/ and review-images/thumbs/, records the result in
+ * imageUploads/{uploadId} for the client to pick up, and deletes the raw
+ * upload once conversion succeeds.
+ */
+exports.processReviewImage = onObjectFinalized(
+  {
+    region: "us-central1",
+    // Explicit bucket required: FIREBASE_CONFIG isn't reliably present
+    // during `firebase deploy`'s local source analysis step, and without
+    // this the builder throws "Missing bucket name" and the export is
+    // silently dropped from the deployable function list.
+    bucket: "review-monster-80750.firebasestorage.app",
+  },
+  async (event) => {
+    const object = event.data;
+    const filePath = object.name || "";
+    const uploadsPrefix = "review-images/uploads/";
+
+    // Only handle raw uploads; ignore our own derivative writes.
+    if (!filePath.startsWith(uploadsPrefix)) return;
+
+    const fileName = filePath.slice(uploadsPrefix.length);
+    const uploadId = fileName.split(".")[0];
+    if (!uploadId) return;
+
+    const firestore = getDb();
+    const statusRef = firestore.collection("imageUploads").doc(uploadId);
+    const bucket = getStorage().bucket(object.bucket);
+    const rawFile = bucket.file(filePath);
+
+    try {
+      if (
+        !object.contentType || !object.contentType.startsWith("image/") ||
+        Number(object.size) > MAX_UPLOAD_BYTES
+      ) {
+        throw new Error("Rejected: not a valid image upload");
+      }
+
+      const [buffer] = await rawFile.download();
+
+      const displayBuffer = await sharp(buffer)
+        .rotate()
+        .resize({ width: 1600, withoutEnlargement: true })
+        .webp({ quality: 80 })
+        .toBuffer();
+      const thumbBuffer = await sharp(buffer)
+        .rotate()
+        .resize({ width: 400, withoutEnlargement: true })
+        .webp({ quality: 70 })
+        .toBuffer();
+
+      const displayUrl = await uploadDerivative(
+        bucket, `review-images/display/${uploadId}.webp`, displayBuffer,
+      );
+      const thumbUrl = await uploadDerivative(
+        bucket, `review-images/thumbs/${uploadId}.webp`, thumbBuffer,
+      );
+
+      await statusRef.set({
+        status: "ready",
+        displayUrl,
+        thumbUrl,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      await rawFile.delete().catch(() => { });
+    } catch (error) {
+      console.error("processReviewImage failed", uploadId, error);
+      await statusRef.set({
+        status: "error",
+        message: "We couldn't process that photo. Please try another file.",
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
+  },
+);
+
+/**
+ * Uploads a converted image buffer with a download token and returns its
+ * public Firebase Storage download URL.
+ * @param {object} bucket Admin SDK bucket handle.
+ * @param {string} path Destination object path.
+ * @param {Buffer} buffer Image bytes to write.
+ * @return {Promise<string>} The `?alt=media&token=` download URL.
+ */
+async function uploadDerivative(bucket, path, buffer) {
+  const token = crypto.randomUUID();
+  const file = bucket.file(path);
+  await file.save(buffer, {
+    metadata: {
+      contentType: "image/webp",
+      metadata: { firebaseStorageDownloadTokens: token },
+    },
+  });
+  return `https://firebasestorage.googleapis.com/v0/b/` +
+    `${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`;
+}
 

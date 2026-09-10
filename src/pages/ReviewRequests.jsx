@@ -62,6 +62,7 @@ const QR_EXPORT_WIDTH_PX = 295; // 25 mm @ 300 dpi
 const QR_EXPORT_HEIGHT_PX = 295;
 
 const getInitialForm = () => ({
+  title: "",
   language: "en",
   couponCode: "",
   shopUrl: "",
@@ -233,6 +234,7 @@ export default function ReviewRequests() {
     setSaving(true);
     try {
       await updateReviewRequest(editTarget.id, {
+        title: editForm.title,
         language: editForm.language,
         couponCode: editForm.couponCode,
         shopUrl: editForm.shopUrl,
@@ -252,7 +254,7 @@ export default function ReviewRequests() {
   const formLanguage = form.language === "ja" ? "ja" : "en";
   const fq = QR_COPY[formLanguage];
 
-  const printTitle = qrTarget?.shopUrl || qrTarget?.productTitle || "Review";
+  const printTitle = qrTarget?.title || qrTarget?.productTitle || "Review";
   const qrLanguage = qrTarget?.language === "ja" ? "ja" : "en";
   const q = QR_COPY[qrLanguage];
   const qrLanguageCode = qrLanguage === "ja" ? "JP" : "EN";
@@ -452,7 +454,8 @@ export default function ReviewRequests() {
                   >
                     <Box>
                       <Typography variant="subtitle1" fontWeight={600}>
-                        {req.shopUrl ||
+                        {req.title ||
+                          req.shopUrl ||
                           req.productTitle ||
                           `Review Request (${req.language === "ja" ? "Japanese" : "English"})`}
                       </Typography>
@@ -527,6 +530,7 @@ export default function ReviewRequests() {
                         onClick={() => {
                           setEditTarget(req);
                           setEditForm({
+                            title: req.title ?? "",
                             language: req.language ?? "en",
                             couponCode: req.couponCode ?? "",
                             shopUrl: req.shopUrl ?? "",
@@ -563,6 +567,14 @@ export default function ReviewRequests() {
         <DialogTitle>New Review Request</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Title"
+              value={form.title}
+              onChange={(e) => set("title", e.target.value)}
+              fullWidth
+              placeholder="e.g. Instagram DM - Sept batch"
+              helperText="Unique label to tell this request apart from others"
+            />
             <TextField
               select
               label={fq.language}
@@ -609,6 +621,14 @@ export default function ReviewRequests() {
         <DialogContent>
           {editForm && (
             <Stack spacing={2} sx={{ mt: 1 }}>
+              <TextField
+                label="Title"
+                value={editForm.title}
+                onChange={(e) =>
+                  setEditForm((prev) => ({ ...prev, title: e.target.value }))
+                }
+                fullWidth
+              />
               <TextField
                 select
                 label="Language"

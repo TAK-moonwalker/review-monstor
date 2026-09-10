@@ -23,7 +23,7 @@ rules_version = '2';
 //       const req = reqSnap.docs[0];
 //       if (req.data().used) throw new HttpsError('failed-precondition', 'Token already used');
 //       const batch = db.batch();
-//       batch.set(db.collection('reviews').doc(), { ...reviewData, source: 'qr_form', status: 'draft' });
+//       batch.set(db.collection('reviews').doc(), { ...reviewData, source: 'qr', status: 'draft' });
 //       batch.update(req.ref, { used: true, submittedReviewId: ..., updatedAt: FieldValue.serverTimestamp() });
 //       await batch.commit();
 //     });
@@ -52,7 +52,7 @@ service cloud.firestore {
         request.auth == null &&
         request.resource.data.keys().hasAll(['reviewerName', 'body', 'rating', 'source', 'crocheterName']) &&
         request.resource.data.status == 'draft' &&
-        request.resource.data.source == 'qr_form' &&
+        request.resource.data.source == 'qr' &&
         request.resource.data.rating is int &&
         request.resource.data.rating >= 1 &&
         request.resource.data.rating <= 5;
@@ -90,6 +90,14 @@ service cloud.firestore {
     match /reviewSubmissionLogs/{id} {
       // Admin SDK only via Cloud Function; no client access.
       allow read, write: if false;
+    }
+
+    // ── imageUploads ──────────────────────────────────────────────────────────
+    match /imageUploads/{uploadId} {
+      // Client polls its own upload's status by (unguessable) id only.
+      allow get: if true;
+      // Written only by the processReviewImage Cloud Function (Admin SDK).
+      allow list, create, update, delete: if false;
     }
 
   }

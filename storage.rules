@@ -2,18 +2,29 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Allow authenticated users to upload and read their review images
-    match /review-images/{allPaths=**} {
+    // Raw uploads awaiting WebP conversion by processReviewImage (Cloud Function)
+    match /review-images/uploads/{allPaths=**} {
       allow read: if request.auth != null;
       // Unauthenticated creates: public form customers uploading review photos
-      allow create: if request.resource.size <= 1468006
+      allow create: if request.resource.size <= 5033165
         && request.resource.contentType.matches('image/.*');
       allow update: if request.auth != null
-        && request.resource.size <= 1468006
+        && request.resource.size <= 5033165
         && request.resource.contentType.matches('image/.*');
       allow delete: if request.auth != null;
     }
-    
+
+    // Converted WebP outputs: written only by the Cloud Function (Admin SDK
+    // bypasses rules); publicly readable for review/SNS display.
+    match /review-images/display/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /review-images/thumbs/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Deny all other paths
     match /{allPaths=**} {
       allow read, write: if false;

@@ -24,9 +24,9 @@ import DEFAULT_ITEMS from "../data/items.json";
 import AddPhotoAlternateOutlined from "@mui/icons-material/AddPhotoAlternateOutlined";
 import CloseOutlined from "@mui/icons-material/CloseOutlined";
 import { uploadReviewImage } from "../firebase/storageService";
+import { MAX_PHOTO_BYTES, formatMb } from "../utils/photoUpload";
 
 const MAX_PUBLIC_PHOTOS = 3;
-const MAX_PHOTO_BYTES = 1.4 * 1024 * 1024; // 1.4 MB
 
 const detectDefaultLanguage = () => {
   if (typeof navigator === "undefined") return "en";
@@ -66,9 +66,11 @@ const UI_COPY = {
     imagesOptional: "Images are optional.",
     addPhoto: "Add Photo",
     uploading: "Uploading…",
+    processingPhoto: "Processing photo…",
     errorPhotoCount: "Maximum 3 photos allowed.",
-    errorPhotoSize: "File must be 1.4 MB or smaller.",
+    errorPhotoSize: (mb) => `File is ${mb} MB. Maximum size is 4.8 MB.`,
     errorPhotoUpload: "Upload failed. Please try again.",
+    errorPhotoTimeout: "Photo processing is taking too long. Please try again.",
     submit: "Submit Review",
     submitting: "Submitting…",
     errorProduct: "Please select an item",
@@ -97,9 +99,12 @@ const UI_COPY = {
     imagesOptional: "画像は任意です。",
     addPhoto: "写真を追加",
     uploading: "アップロード中…",
+    processingPhoto: "写真を処理中…",
     errorPhotoCount: "写真は最大3枚までです。",
-    errorPhotoSize: "ファイルは1.4MB以下にしてください。",
+    errorPhotoSize: (mb) => `ファイルサイズは${mb}MBです。最大4.8MBまでです。`,
     errorPhotoUpload: "アップロードに失敗しました。もう一度お試しください。",
+    errorPhotoTimeout:
+      "写真の処理に時間がかかっています。もう一度お試しください。",
     submit: "レビューを送信",
     submitting: "送信中…",
     errorProduct: "商品を選択してください",
@@ -124,6 +129,7 @@ const INITIAL = {
   permissionGranted: true,
   website: "", // honeypot
   pictureUrls: [],
+  pictureThumbUrls: [], // local-only preview thumbnails, not submitted
 };
 
 export default function PublicReviewForm() {
@@ -138,6 +144,7 @@ export default function PublicReviewForm() {
   const [submitting, setSubmitting] = useState(false);
   const pictureInputRef = useRef(null);
   const [pictureUploading, setPictureUploading] = useState(false);
+  const [pictureProcessing, setPictureProcessing] = useState(false);
   const [pictureError, setPictureError] = useState("");
   const language = form.language === "ja" ? "ja" : "en";
   const t = UI_COPY[language];
@@ -211,21 +218,33 @@ export default function PublicReviewForm() {
       return;
     }
     if (file.size > MAX_PHOTO_BYTES) {
-      setPictureError(t.errorPhotoSize);
+      setPictureError(t.errorPhotoSize(formatMb(file.size)));
       return;
     }
     setPictureUploading(true);
     setPictureError("");
+    // Byte upload is fast; most of the wait is the WebP conversion.
+    const processingTimer = setTimeout(() => setPictureProcessing(true), 600);
     try {
-      const { downloadURL } = await uploadReviewImage(file);
+      const { downloadURL, thumbUrl } = await uploadReviewImage(file);
       setForm((prev) => ({
         ...prev,
         pictureUrls: [...(prev.pictureUrls ?? []), downloadURL],
+        pictureThumbUrls: [
+          ...(prev.pictureThumbUrls ?? []),
+          thumbUrl || downloadURL,
+        ],
       }));
-    } catch {
-      setPictureError(t.errorPhotoUpload);
+    } catch (err) {
+      setPictureError(
+        err?.message === "Photo processing timed out. Please try again."
+          ? t.errorPhotoTimeout
+          : t.errorPhotoUpload,
+      );
     } finally {
+      clearTimeout(processingTimer);
       setPictureUploading(false);
+      setPictureProcessing(false);
     }
   };
 
@@ -309,12 +328,6 @@ export default function PublicReviewForm() {
           <Typography color="text.secondary" sx={{ mb: 1 }}>
             {settings.reviewFormDescription}
           </Typography>
-        )}
-
-        {errors.form && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {errors.form}
-          </Alert>
         )}
 
         <Box component="form" onSubmit={handleSubmit} sx={{ mt: 3 }}>
@@ -472,7 +485,11 @@ export default function PublicReviewForm() {
                     (form.pictureUrls?.length ?? 0) >= MAX_PUBLIC_PHOTOS
                   }
                 >
-                  {pictureUploading ? t.uploading : t.addPhoto}
+                  {pictureUploading
+                    ? pictureProcessing
+                      ? t.processingPhoto
+                      : t.uploading
+                    : t.addPhoto}
                 </Button>
                 <Typography variant="caption" color="text.secondary">
                   {t.imagesOptional}
@@ -500,7 +517,7 @@ export default function PublicReviewForm() {
                       >
                         <Box
                           component="img"
-                          src={url}
+                          src={form.pictureThumbUrls?.[i] || url}
                           alt={`Review photo ${i + 1}`}
                           sx={{
                             width: 80,
@@ -528,6 +545,9 @@ export default function PublicReviewForm() {
                               pictureUrls: prev.pictureUrls.filter(
                                 (_, idx) => idx !== i,
                               ),
+                              pictureThumbUrls: (
+                                prev.pictureThumbUrls ?? []
+                              ).filter((_, idx) => idx !== i),
                             }))
                           }
                         >
@@ -548,6 +568,8 @@ export default function PublicReviewForm() {
             >
               {submitting ? t.submitting : t.submit}
             </Button>
+
+            {errors.form && <Alert severity="error">{errors.form}</Alert>}
           </Stack>
         </Box>
       </Box>

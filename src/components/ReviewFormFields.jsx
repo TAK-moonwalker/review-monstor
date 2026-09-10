@@ -19,9 +19,9 @@ import CloseOutlined from "@mui/icons-material/CloseOutlined";
 import OpenInNewOutlined from "@mui/icons-material/OpenInNewOutlined";
 import UploadFileOutlined from "@mui/icons-material/UploadFileOutlined";
 import { uploadReviewImage } from "../firebase/storageService";
+import { MAX_PHOTO_BYTES, formatMb } from "../utils/photoUpload";
 
 const MAX_REVIEW_PHOTOS = 3;
-const MAX_PHOTO_BYTES = 1.4 * 1024 * 1024; // 1.4 MB
 
 const SectionHeader = ({ title }) => (
   <Box sx={{ mt: 1 }}>
@@ -46,6 +46,7 @@ export default function ReviewFormFields({ form, setForm }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [pictureUploading, setPictureUploading] = useState(false);
+  const [pictureProcessing, setPictureProcessing] = useState(false);
   const [pictureError, setPictureError] = useState("");
 
   const handleFileChange = async (e) => {
@@ -72,21 +73,35 @@ export default function ReviewFormFields({ form, setForm }) {
       return;
     }
     if (file.size > MAX_PHOTO_BYTES) {
-      setPictureError("File must be 1.4 MB or smaller.");
+      setPictureError(
+        `File is ${formatMb(file.size)} MB. Maximum size is 4.8 MB.`,
+      );
       return;
     }
     setPictureUploading(true);
     setPictureError("");
+    // Byte upload is fast; most of the wait is the WebP conversion.
+    const processingTimer = setTimeout(() => setPictureProcessing(true), 600);
     try {
-      const { downloadURL } = await uploadReviewImage(file);
+      const { downloadURL, thumbUrl } = await uploadReviewImage(file);
       setForm((prev) => ({
         ...prev,
         pictureUrls: [...(prev.pictureUrls ?? []), downloadURL],
+        pictureThumbUrls: [
+          ...(prev.pictureThumbUrls ?? []),
+          thumbUrl || downloadURL,
+        ],
       }));
-    } catch {
-      setPictureError("Upload failed. Please try again.");
+    } catch (err) {
+      setPictureError(
+        err?.message === "Photo processing timed out. Please try again."
+          ? "Photo processing is taking too long. Please try again."
+          : "Upload failed. Please try again.",
+      );
     } finally {
+      clearTimeout(processingTimer);
       setPictureUploading(false);
+      setPictureProcessing(false);
     }
   };
 
@@ -103,7 +118,7 @@ export default function ReviewFormFields({ form, setForm }) {
           onChange={f("source")}
           fullWidth
         >
-          {["manual", "token", "import", "google", "other"].map((v) => (
+          {["manual", "token", "qr", "import", "google", "other"].map((v) => (
             <MenuItem key={v} value={v}>
               {v}
             </MenuItem>
@@ -177,6 +192,13 @@ export default function ReviewFormFields({ form, setForm }) {
           fullWidth
         />
       </Stack>
+
+      <TextField
+        label="Crocheter Name"
+        value={form.crocheterName || ""}
+        onChange={f("crocheterName")}
+        fullWidth
+      />
 
       <FormControlLabel
         control={
@@ -362,10 +384,14 @@ export default function ReviewFormFields({ form, setForm }) {
               (form.pictureUrls?.length ?? 0) >= MAX_REVIEW_PHOTOS
             }
           >
-            {pictureUploading ? "Uploading…" : "Add Photo"}
+            {pictureUploading
+              ? pictureProcessing
+                ? "Processing photo…"
+                : "Uploading…"
+              : "Add Photo"}
           </Button>
           <Typography variant="caption" color="text.secondary">
-            Up to {MAX_REVIEW_PHOTOS}, max 1.4 MB each (optional)
+            Up to {MAX_REVIEW_PHOTOS}, max 4.8 MB each (optional)
           </Typography>
         </Stack>
         {pictureError && (
@@ -386,7 +412,7 @@ export default function ReviewFormFields({ form, setForm }) {
             <Box key={i} sx={{ position: "relative", width: 80, height: 80 }}>
               <Box
                 component="img"
-                src={url}
+                src={form.pictureThumbUrls?.[i] || url}
                 alt={`Review photo ${i + 1}`}
                 sx={{
                   width: 80,
@@ -412,6 +438,9 @@ export default function ReviewFormFields({ form, setForm }) {
                   setForm((prev) => ({
                     ...prev,
                     pictureUrls: prev.pictureUrls.filter((_, idx) => idx !== i),
+                    pictureThumbUrls: (prev.pictureThumbUrls ?? []).filter(
+                      (_, idx) => idx !== i,
+                    ),
                   }))
                 }
               >

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Alert,
   Box,
@@ -10,34 +10,36 @@ import {
   Stack,
   TextField,
   Typography,
-} from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import FileDownloadOutlined from '@mui/icons-material/FileDownloadOutlined';
-import { useReviews } from '../hooks/useReviews';
-import { useSettings } from '../hooks/useSettings';
-import { deleteReview, markReviewsAsExported } from '../firebase/reviewService';
-import ReviewCard from '../components/ReviewCard';
-import ConfirmDialog from '../components/ConfirmDialog';
-import LoadingScreen from '../components/LoadingScreen';
-import EmptyState from '../components/EmptyState';
-import { exportToJudgeMe } from '../utils/exportJudgeMe';
+} from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import FileDownloadOutlined from "@mui/icons-material/FileDownloadOutlined";
+import { useReviews } from "../hooks/useReviews";
+import { useSettings } from "../hooks/useSettings";
+import { deleteReview, markReviewsAsExported } from "../firebase/reviewService";
+import ReviewCard from "../components/ReviewCard";
+import ConfirmDialog from "../components/ConfirmDialog";
+import LoadingScreen from "../components/LoadingScreen";
+import EmptyState from "../components/EmptyState";
+import { exportToJudgeMe } from "../utils/exportJudgeMe";
 
-const SOURCES = ['all', 'manual', 'token', 'import', 'google', 'other'];
+const SOURCES = ["all", "manual", "token", "qr", "import", "google", "other"];
 
 export default function Reviews() {
   const { reviews, loading, error } = useReviews();
   const { settings } = useSettings();
   const navigate = useNavigate();
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [sourceFilter, setSourceFilter] = useState('all');
-  const [productSearch, setProductSearch] = useState('');
-  const [keyword, setKeyword] = useState('');
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [productSearch, setProductSearch] = useState("");
+  const [keyword, setKeyword] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [deleteError, setDeleteError] = useState('');
+  const [deleteError, setDeleteError] = useState("");
   const [deleteSuccessOpen, setDeleteSuccessOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
-  const [exportLang, setExportLang] = useState(settings.judgeMeLanguage || 'en');
+  const [exportLang, setExportLang] = useState(
+    settings.judgeMeLanguage || "en",
+  );
 
   const toggleSelect = (id) =>
     setSelectedIds((prev) => {
@@ -50,9 +52,13 @@ export default function Reviews() {
   if (loading) return <LoadingScreen />;
 
   const filtered = reviews.filter((r) => {
-    if (statusFilter !== 'all' && r.status !== statusFilter) return false;
-    if (sourceFilter !== 'all' && r.source !== sourceFilter) return false;
-    if (productSearch && !r.productHandle?.toLowerCase().includes(productSearch.toLowerCase())) return false;
+    if (statusFilter !== "all" && r.status !== statusFilter) return false;
+    if (sourceFilter !== "all" && r.source !== sourceFilter) return false;
+    if (
+      productSearch &&
+      !r.productHandle?.toLowerCase().includes(productSearch.toLowerCase())
+    )
+      return false;
     if (keyword) {
       const q = keyword.toLowerCase();
       const match =
@@ -69,7 +75,7 @@ export default function Reviews() {
   const handleDelete = async () => {
     if (!deleteTarget || deleteLoading) return;
     setDeleteLoading(true);
-    setDeleteError('');
+    setDeleteError("");
     try {
       await deleteReview(deleteTarget.id);
       setDeleteTarget(null);
@@ -81,7 +87,7 @@ export default function Reviews() {
         return next;
       });
     } catch (err) {
-      setDeleteError(String(err?.message || err || 'Failed to delete review.'));
+      setDeleteError(String(err?.message || err || "Failed to delete review."));
     } finally {
       setDeleteLoading(false);
     }
@@ -98,7 +104,11 @@ export default function Reviews() {
       )}
 
       {deleteError && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setDeleteError('')}>
+        <Alert
+          severity="error"
+          sx={{ mb: 2 }}
+          onClose={() => setDeleteError("")}
+        >
           Delete failed: {deleteError}
         </Alert>
       )}
@@ -112,7 +122,12 @@ export default function Reviews() {
       >
         <Typography variant="h5" fontWeight={700}>
           Reviews
-          <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+          <Typography
+            component="span"
+            variant="body2"
+            color="text.secondary"
+            sx={{ ml: 1 }}
+          >
             ({filtered.length} / {reviews.length})
           </Typography>
         </Typography>
@@ -120,7 +135,7 @@ export default function Reviews() {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => navigate('/reviews/new')}
+            onClick={() => navigate("/reviews/new")}
           >
             Add Review
           </Button>
@@ -128,7 +143,12 @@ export default function Reviews() {
       </Stack>
 
       {/* Filters */}
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} flexWrap="wrap" sx={{ mb: 3 }}>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={2}
+        flexWrap="wrap"
+        sx={{ mb: 3 }}
+      >
         <TextField
           placeholder="Keyword search..."
           value={keyword}
@@ -166,7 +186,9 @@ export default function Reviews() {
           sx={{ minWidth: 130 }}
         >
           {SOURCES.map((s) => (
-            <MenuItem key={s} value={s}>{s === 'all' ? 'All Sources' : s}</MenuItem>
+            <MenuItem key={s} value={s}>
+              {s === "all" ? "All Sources" : s}
+            </MenuItem>
           ))}
         </TextField>
       </Stack>
@@ -201,9 +223,13 @@ export default function Reviews() {
             : `Export All (${filtered.length})`}
         </Button>
         {selectedIds.size > 0 ? (
-          <Button size="small" onClick={clearSelection}>Clear selection</Button>
+          <Button size="small" onClick={clearSelection}>
+            Clear selection
+          </Button>
         ) : (
-          <Button size="small" onClick={selectAll}>Select all</Button>
+          <Button size="small" onClick={selectAll}>
+            Select all
+          </Button>
         )}
       </Stack>
 
@@ -229,9 +255,11 @@ export default function Reviews() {
       <ConfirmDialog
         open={!!deleteTarget}
         title="Delete Review"
-        message={deleteLoading
-          ? 'Deleting review...'
-          : `Delete review by ${deleteTarget?.reviewerName || 'this reviewer'}? This cannot be undone.`}
+        message={
+          deleteLoading
+            ? "Deleting review..."
+            : `Delete review by ${deleteTarget?.reviewerName || "this reviewer"}? This cannot be undone.`
+        }
         loading={deleteLoading}
         confirmText="Delete"
         onConfirm={handleDelete}
@@ -242,9 +270,14 @@ export default function Reviews() {
         open={deleteSuccessOpen}
         autoHideDuration={2400}
         onClose={() => setDeleteSuccessOpen(false)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert onClose={() => setDeleteSuccessOpen(false)} severity="success" variant="filled" sx={{ width: '100%' }}>
+        <Alert
+          onClose={() => setDeleteSuccessOpen(false)}
+          severity="success"
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
           Review deleted successfully.
         </Alert>
       </Snackbar>

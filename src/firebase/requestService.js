@@ -21,6 +21,7 @@ export const createReviewRequest = (uid, data) =>
   addDoc(collection(db, COL), {
     uid,
     token: data.token ?? '',
+    title: data.title ?? '',
     language: data.language ?? 'en',
     customerName: data.customerName ?? '',
     customerEmail: data.customerEmail ?? '',
